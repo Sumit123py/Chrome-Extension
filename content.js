@@ -88,7 +88,13 @@ function createUI(targetElement) {
         >
           📁 New Folder
         </button>
-        <div class="folders" style="display: flex; flex-direction: column;"></div>
+        <input 
+          type="text" 
+          id="folderSearch"
+          placeholder="Search folders and chats..."
+          style="margin-top: 10px; padding: 5px; font-size: 14px; background-color: #2a2a2a; width: 100%; color: white; border: 1px solid #444; border-radius: 5px;"
+        >
+        <div class="folders" style="display: flex; flex-direction: column; margin-top: 10px;"></div>
       </div>
     </div>
   `;
@@ -111,6 +117,7 @@ function renderFolders(folderArray, container, depth = 0) {
 function createFolderElement(folder, index, depth) {
   const folderElement = document.createElement("div");
   folderElement.style.marginLeft = "5px";
+  folderElement.style.flexDirection = "column";
   const backgroundColor = colorGenerator(folder.title);
 
   const folderTitle = document.createElement("p");
@@ -143,6 +150,8 @@ function createFolderElement(folder, index, depth) {
   subfolderContainer.style.cssText = `
   margin-left: 10px; display: flex; flex-direction: column;
   `;
+  subfolderContainer.className = "subFolders";
+  subfolderContainer.style.flexDirection = "column";
   renderFolders(folder.children, subfolderContainer, depth + 1);
   folderElement.appendChild(subfolderContainer);
 
@@ -301,6 +310,12 @@ const observer2 = new MutationObserver((mutations, observerInstance) => {
           ""
         );
 
+        // folderData.push({
+        //   id: generateRandomId(),
+        //   title: name,
+        //   type: "file",
+        //   children: [],
+        // });
         renderFolders(folderData, document.querySelector(".folders"));
         // const observer3 = new MutationObserver(
         //   (mutations, observerInstance) => {
@@ -560,6 +575,96 @@ function renderNestedFolders(folderData, container) {
 
 console.log("arr", folderData);
 
+function highlightText(element, searchTerm) {
+  const text = element.textContent;
+  if (searchTerm && text.toLowerCase().includes(searchTerm.toLowerCase())) {
+    const regex = new RegExp(`(${searchTerm})`, "gi");
+    element.innerHTML = text.replace(
+      regex,
+      '<span style="background-color: yellow; color: black">$1</span>'
+    );
+    return true;
+  }
+  element.innerHTML = text;
+  return false;
+}
+
+function searchFolders(searchTerm) {
+  const allFolderElements = document.querySelectorAll(".folders div");
+  let hasMatch = false;
+
+  allFolderElements.forEach((folderElement) => {
+    const titleElement = folderElement.querySelector("p"); // Get the folder title
+    const childrenContainers = folderElement.querySelectorAll(".subFolders"); // Get all nested subfolders
+
+    let localMatch = false; // Track if the current folder or any of its children matches
+
+    if (titleElement) {
+      // Check if the folder title matches the search term
+      localMatch = highlightText(titleElement, searchTerm);
+    }
+
+    // Recursively check subfolders
+    childrenContainers.forEach((container) => {
+      const childMatches = searchSubfolders(container, searchTerm); // Check child folders
+      if (childMatches) {
+        container.style.display = "flex"; // Show matching subfolder
+        localMatch = true; // Propagate match upwards
+      }
+      
+    });
+
+    if (localMatch) {
+      hasMatch = true; // If any match is found, set hasMatch to true
+    }
+  });
+
+  return hasMatch;
+}
+
+function searchSubfolders(container, searchTerm) {
+  let hasChildMatch = false;
+  const subFolders = container.querySelectorAll(":scope > div"); // Get immediate subfolders
+  subFolders.forEach((subFolder) => {
+    const titleElement = subFolder.querySelector("p"); // Get the title
+    const nestedContainers = subFolder.querySelectorAll(".subFolders"); // Nested subfolders
+
+    let localMatch = false;
+
+    if (titleElement) {
+      // Check if the folder title matches the search term
+      localMatch = highlightText(titleElement, searchTerm);
+    }
+
+    // Recursively check deeper nested subfolders
+    nestedContainers.forEach((nestedContainer) => {
+      const childMatch = searchSubfolders(nestedContainer, searchTerm);
+      if (childMatch) {
+        nestedContainer.style.display = "flex"; // Show matching nested subfolder
+        localMatch = true; // Propagate match upwards
+      }
+      
+    });
+
+    if (localMatch) {
+      subFolder.style.display = "flex"; // Show current folder if it matches or has a matching child
+      hasChildMatch = true;
+    }
+    
+  });
+
+  return hasChildMatch;
+}
+
+function setupSearchBar() {
+  const searchInput = document.getElementById("folderSearch");
+  searchInput.addEventListener("input", (e) => {
+    const searchTerm = e.target.value.trim();
+    searchFolders(searchTerm);
+  });
+}
+
 function setupFolderUI(foldersContainer) {
+  setupSearchBar();
   renderFolders(folderData, foldersContainer); // Display folder structure
 }
