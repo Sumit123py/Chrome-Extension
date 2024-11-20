@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGpt folder Extension",
+  "version": "1.0",
+  "description": "A simple extension to interact with webpages.",
+  "permissions": ["activeTab", "scripting", "tabs", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "imresizer-1731312355421.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
