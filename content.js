@@ -136,6 +136,7 @@ function createFolderElement(folder, index, depth) {
   margin-top: 10px; font-size: 14px;
   `;
   folderTitle.style.width = "100%";
+  folderTitle.style.fontWeight = "600";
 
   folderElement.appendChild(folderTitle);
   // Add hover effect
@@ -264,6 +265,7 @@ function setupAddFolderButton(button) {
         children: [],
       });
       renderFolders(folderData, document.querySelector(".folders"));
+      input.value = "";
       modal.style.display = "none";
       // Save to storage after adding folder
       chrome.storage.local.set({ folderData: folderData });
@@ -276,17 +278,22 @@ function setupAddFolderButton(button) {
   });
 }
 
-const observer2 = new MutationObserver((mutations, observerInstance) => {
-  const historyItems = document.querySelectorAll("li.relative"); // This is a NodeList
-  console.log(historyItems);
+const observer2 = new MutationObserver((mutations) => {
+  mutations.forEach((mutation) => {
+    mutation.addedNodes.forEach((node) => {
+      if (node.nodeType === 1) {
+        // Check if it's an element node
+        const historyItems = node.matches("li.relative")
+          ? [node]
+          : Array.from(node.querySelectorAll("li.relative"));
 
-  if (historyItems.length > 0) {
-    // Check if items are found
-    Array.from(historyItems).forEach((item) => {
-      // Convert NodeList to an array and use forEach
-      const addChat = document.createElement("button");
-      addChat.innerText = "Add";
-      addChat.style.cssText = `
+        historyItems.forEach((item) => {
+          // Check if button already exists and if the item has a first child
+          if (!item.querySelector(".add-chat-btn") && item.firstChild) {
+            const addChat = document.createElement("button");
+            addChat.className = "add-chat-btn";
+            addChat.innerText = "Add";
+            addChat.style.cssText = `
         padding: 4px 8px;
         background-color: #2d2d2d;
         color: #ffffff;
@@ -299,79 +306,80 @@ const observer2 = new MutationObserver((mutations, observerInstance) => {
         transition: background-color 0.2s;
       `;
 
-      item.firstChild.appendChild(addChat);
-      observerInstance.disconnect(); // Stop observing once the element is found
+            item.firstChild.appendChild(addChat);
+            
 
-      // Get the current page URL
-      const URL = window.location.href;
+            // Get the current page URL
+            const URL = window.location.href;
 
-      addChat.addEventListener("click", () => {
-        const name = item.firstChild.firstChild.firstChild.innerText.replace(
-          "+",
-          ""
-        );
+            addChat.addEventListener("click", () => {
+              const name =
+                item.firstChild.firstChild.firstChild.innerText.replace(
+                  "+",
+                  ""
+                );
 
-        // folderData.push({
-        //   id: generateRandomId(),
-        //   title: name,
-        //   type: "file",
-        //   children: [],
-        // });
-        renderFolders(folderData, document.querySelector(".folders"));
-        // const observer3 = new MutationObserver(
-        //   (mutations, observerInstance) => {
-        const targetElement = document.body;
+              // folderData.push({
+              //   id: generateRandomId(),
+              //   title: name,
+              //   type: "file",
+              //   children: [],
+              // });
+              renderFolders(folderData, document.querySelector(".folders"));
+              // const observer3 = new MutationObserver(
+              //   (mutations, observerInstance) => {
+              const targetElement = document.body;
 
-        const modalContainer = document.createElement("div");
-        modalContainer.style.width = "100%";
-        modalContainer.style.height = "100%";
-        modalContainer.style.backgroundColor = "transparent";
-        modalContainer.style.position = "absolute";
-        modalContainer.style.top = "0";
-        modalContainer.style.left = "0";
-        modalContainer.style.transition = "transform 0.3s ease"; // Add transition for smooth scaling
-        modalContainer.style.transform = "scale(1)"; // Initial scale is 1
+              const modalContainer = document.createElement("div");
+              modalContainer.style.width = "100%";
+              modalContainer.style.height = "100%";
+              modalContainer.style.backgroundColor = "transparent";
+              modalContainer.style.position = "absolute";
+              modalContainer.style.top = "0";
+              modalContainer.style.left = "0";
+              modalContainer.style.transition = "transform 0.3s ease"; // Add transition for smooth scaling
+              modalContainer.style.transform = "scale(1)"; // Initial scale is 1
 
-        targetElement.appendChild(modalContainer);
+              targetElement.appendChild(modalContainer);
 
-        const modalContainerBackground = document.createElement("div");
-        modalContainerBackground.style.width = "100%";
-        modalContainerBackground.style.height = "100%";
-        modalContainerBackground.style.backgroundColor = "transparent"; // Semi-transparent background
-        modalContainerBackground.style.position = "absolute";
-        modalContainerBackground.style.top = "0";
-        modalContainerBackground.style.left = "0";
+              const modalContainerBackground = document.createElement("div");
+              modalContainerBackground.style.width = "100%";
+              modalContainerBackground.style.height = "100%";
+              modalContainerBackground.style.backgroundColor = "transparent"; // Semi-transparent background
+              modalContainerBackground.style.position = "absolute";
+              modalContainerBackground.style.top = "0";
+              modalContainerBackground.style.left = "0";
 
-        modalContainer.appendChild(modalContainerBackground);
+              modalContainer.appendChild(modalContainerBackground);
 
-        // Add an ID to the modal box to simulate existing modal content
-        const modalBox = document.createElement("div");
-        modalBox.id = "modalBoxId";
-        modalBox.style.width = "500px";
-        modalBox.style.height = "500px";
-        modalBox.style.backgroundColor = "#1a1a1a";
-        modalBox.style.borderRadius = "10px";
-        modalBox.style.position = "absolute";
-        modalBox.style.top = "50%";
-        modalBox.style.left = "50%";
-        modalBox.style.transform = "translate(-50%, -50%)";
-        modalBox.style.padding = "20px";
-        modalBox.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
-        modalBox.style.display = "flex";
-        modalBox.style.flexDirection = "column";
-        modalBox.style.gap = "10px";
-        modalContainer.appendChild(modalBox);
+              // Add an ID to the modal box to simulate existing modal content
+              const modalBox = document.createElement("div");
+              modalBox.id = "modalBoxId";
+              modalBox.style.width = "500px";
+              modalBox.style.height = "500px";
+              modalBox.style.backgroundColor = "#1a1a1a";
+              modalBox.style.borderRadius = "10px";
+              modalBox.style.position = "absolute";
+              modalBox.style.top = "50%";
+              modalBox.style.left = "50%";
+              modalBox.style.transform = "translate(-50%, -50%)";
+              modalBox.style.padding = "20px";
+              modalBox.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
+              modalBox.style.display = "flex";
+              modalBox.style.flexDirection = "column";
+              modalBox.style.gap = "10px";
+              modalContainer.appendChild(modalBox);
 
-        // Search section
-        const searchSection = document.createElement("div");
-        searchSection.style.cssText = `
+              // Search section
+              const searchSection = document.createElement("div");
+              searchSection.style.cssText = `
           width: 100%;
           padding: 10px 0;
         `;
-        const searchInput = document.createElement("input");
-        searchInput.type = "text";
-        searchInput.placeholder = "Search folders...";
-        searchInput.style.cssText = `
+              const searchInput = document.createElement("input");
+              searchInput.type = "text";
+              searchInput.placeholder = "Search folders...";
+              searchInput.style.cssText = `
           width: 100%;
           padding: 8px;
           border-radius: 5px;
@@ -379,46 +387,47 @@ const observer2 = new MutationObserver((mutations, observerInstance) => {
           background-color: #2a2a2a;
           color: white;
         `;
-        searchSection.appendChild(searchInput);
-        modalBox.appendChild(searchSection);
+              searchInput.id = "folderSearch";
+              searchSection.appendChild(searchInput);
+              modalBox.appendChild(searchSection);
 
-        // Folder content section
-        const folderSection = document.createElement("div");
-        folderSection.style.cssText = `
+              // Folder content section
+              const folderSection = document.createElement("div");
+              folderSection.style.cssText = `
           flex: 1;
           overflow-y: auto;
           padding: 10px 0;
           border-top: 1px solid #333;
           border-bottom: 1px solid #333;
         `;
-        modalBox.appendChild(folderSection);
+              modalBox.appendChild(folderSection);
 
-        // Button section
-        const buttonSection = document.createElement("div");
-        buttonSection.style.cssText = `
+              // Button section
+              const buttonSection = document.createElement("div");
+              buttonSection.style.cssText = `
           display: flex;
           gap: 10px;
           justify-content: flex-end;
           padding: 10px 0;
         `;
-        modalBox.appendChild(buttonSection);
+              modalBox.appendChild(buttonSection);
 
-        modalContainerBackground.addEventListener("click", () => {
-          if (document.getElementById("modalBoxId")) {
-            modalContainer.style.transform = "scale(0)"; // Trigger scale animation to 0
-            setTimeout(() => {
-              modalContainer.remove(); // Remove after animation completes
-              console.log("Animation complete, modal removed");
-            }, 500); // Match timeout with animation duration
-          }
-        });
+              modalContainerBackground.addEventListener("click", () => {
+                if (document.getElementById("modalBoxId")) {
+                  modalContainer.style.transform = "scale(0)"; // Trigger scale animation to 0
+                  setTimeout(() => {
+                    modalContainer.remove(); // Remove after animation completes
+                    console.log("Animation complete, modal removed");
+                  }, 500); // Match timeout with animation duration
+                }
+              });
 
-        if (document.getElementById("modalBoxId")) {
-          renderNestedFolders(folderData, folderSection); // Call to set up the UI
+              if (document.getElementById("modalBoxId")) {
+                renderNestedFolders(folderData, folderSection); // Call to set up the UI
 
-          const close = document.createElement("button");
-          close.innerText = "Close";
-          close.style.cssText = `
+                const close = document.createElement("button");
+                close.innerText = "Close";
+                close.style.cssText = `
             padding: 8px 16px;
             background-color: #333;
             color: white;
@@ -427,10 +436,10 @@ const observer2 = new MutationObserver((mutations, observerInstance) => {
             cursor: pointer;
           `;
 
-          // Create save button
-          const saveButton = document.createElement("button");
-          saveButton.innerText = "Save";
-          saveButton.style.cssText = `
+                // Create save button
+                const saveButton = document.createElement("button");
+                saveButton.innerText = "Save";
+                saveButton.style.cssText = `
             padding: 8px 16px;
             background-color: #4CAF50;
             color: white;
@@ -439,77 +448,86 @@ const observer2 = new MutationObserver((mutations, observerInstance) => {
             cursor: pointer;
           `;
 
-          buttonSection.appendChild(saveButton);
-          buttonSection.appendChild(close);
+                buttonSection.appendChild(saveButton);
+                buttonSection.appendChild(close);
 
-          // Save button click handler
-          saveButton.addEventListener("click", () => {
-            if (checkBox.length > 0) {
-              // Find selected folders
-              const selectedFolders = findFoldersById(folderData, checkBox);
+                // Save button click handler
+                saveButton.addEventListener("click", () => {
+                  if (checkBox.length > 0) {
+                    // Find selected folders
+                    const selectedFolders = findFoldersById(
+                      folderData,
+                      checkBox
+                    );
 
-              // Add chat to selected folders
-              selectedFolders.forEach((folder) => {
-                folder.children.unshift({
-                  id: generateRandomId(),
-                  title: name,
-                  type: "file",
-                  children: [],
+                    // Add chat to selected folders
+                    selectedFolders.forEach((folder) => {
+                      folder.children.unshift({
+                        id: generateRandomId(),
+                        title: name,
+                        type: "file",
+                        children: [],
+                      });
+                    });
+
+                    // Reset checkbox array
+                    checkBox = [];
+
+                    // Re-render folders
+                    renderFolders(
+                      folderData,
+                      document.querySelector(".folders")
+                    );
+                    // Save to storage after adding file
+                    chrome.storage.local.set({ folderData: folderData });
+
+                    // Close modal
+                    modalContainer.style.transform = "scale(0)";
+                    setTimeout(() => {
+                      modalContainer.remove();
+                    }, 500);
+                  } else {
+                    alert("Please select at least one folder");
+                  }
                 });
-              });
 
-              // Reset checkbox array
-              checkBox = [];
+                close.addEventListener("click", () => {
+                  if (document.getElementById("modalBoxId")) {
+                    modalContainer.style.transform = "scale(0)"; // Trigger scale animation to 0
+                    setTimeout(() => {
+                      modalContainer.remove(); // Remove after animation completes
+                      console.log("Animation complete, modal removed");
+                    }, 500); // Match timeout with animation duration
+                  }
+                });
 
-              // Re-render folders
-              renderFolders(folderData, document.querySelector(".folders"));
-              // Save to storage after adding file
-              chrome.storage.local.set({ folderData: folderData });
+                observerInstance.disconnect(); // Disconnect observer after initialization
+              }
+              // }
+              // );
 
-              // Close modal
-              modalContainer.style.transform = "scale(0)";
-              setTimeout(() => {
-                modalContainer.remove();
-              }, 500);
-            } else {
-              alert("Please select at least one folder");
-            }
-          });
+              // Observe changes in the DOM to locate the target element
+              // observer3.observe(document.body, { childList: true, subtree: true });
+              console.log("arr", folderData);
+            });
+            addChat.addEventListener("mouseover", () => {
+              addChat.style.backgroundColor = "rgb(100, 100, 100)";
+            });
+            addChat.addEventListener("mouseleave", () => {
+              addChat.style.backgroundColor = "transparent";
+            });
 
-          close.addEventListener("click", () => {
-            if (document.getElementById("modalBoxId")) {
-              modalContainer.style.transform = "scale(0)"; // Trigger scale animation to 0
-              setTimeout(() => {
-                modalContainer.remove(); // Remove after animation completes
-                console.log("Animation complete, modal removed");
-              }, 500); // Match timeout with animation duration
-            }
-          });
-
-          observerInstance.disconnect(); // Disconnect observer after initialization
-        }
-        // }
-        // );
-
-        // Observe changes in the DOM to locate the target element
-        // observer3.observe(document.body, { childList: true, subtree: true });
-        console.log("arr", folderData);
-      });
-      addChat.addEventListener("mouseover", () => {
-        addChat.style.backgroundColor = "rgb(100, 100, 100)";
-      });
-      addChat.addEventListener("mouseleave", () => {
-        addChat.style.backgroundColor = "transparent";
-      });
-
-      item.addEventListener("mouseover", () => {
-        addChat.style.display = "grid";
-      });
-      item.addEventListener("mouseleave", () => {
-        addChat.style.display = "none";
-      });
+            item.addEventListener("mouseover", () => {
+              addChat.style.display = "grid";
+            });
+            item.addEventListener("mouseleave", () => {
+              addChat.style.display = "none";
+            });
+          }
+        });
+      }
     });
-  }
+  });
 });
 
 // Observe changes in the DOM
@@ -599,6 +617,7 @@ function renderNestedFolders(folderData, container) {
       margin: 0;
     `;
     folderTitle.style.width = "100%";
+    folderTitle.style.fontWeight = "600";
 
     // Add toggle functionality for children
     let isExpanded = true;
