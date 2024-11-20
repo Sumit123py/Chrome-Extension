@@ -135,6 +135,7 @@ function createFolderElement(folder, index, depth) {
   }; cursor: pointer;
   margin-top: 10px; font-size: 14px;
   `;
+  folderTitle.style.width = "100%";
 
   folderElement.appendChild(folderTitle);
   // Add hover effect
@@ -346,8 +347,8 @@ const observer2 = new MutationObserver((mutations, observerInstance) => {
         // Add an ID to the modal box to simulate existing modal content
         const modalBox = document.createElement("div");
         modalBox.id = "modalBoxId";
-        modalBox.style.width = "300px";
-        modalBox.style.height = "400px";
+        modalBox.style.width = "500px";
+        modalBox.style.height = "500px";
         modalBox.style.backgroundColor = "#1a1a1a";
         modalBox.style.borderRadius = "10px";
         modalBox.style.position = "absolute";
@@ -356,7 +357,51 @@ const observer2 = new MutationObserver((mutations, observerInstance) => {
         modalBox.style.transform = "translate(-50%, -50%)";
         modalBox.style.padding = "20px";
         modalBox.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
+        modalBox.style.display = "flex";
+        modalBox.style.flexDirection = "column";
+        modalBox.style.gap = "10px";
         modalContainer.appendChild(modalBox);
+
+        // Search section
+        const searchSection = document.createElement("div");
+        searchSection.style.cssText = `
+          width: 100%;
+          padding: 10px 0;
+        `;
+        const searchInput = document.createElement("input");
+        searchInput.type = "text";
+        searchInput.placeholder = "Search folders...";
+        searchInput.style.cssText = `
+          width: 100%;
+          padding: 8px;
+          border-radius: 5px;
+          border: 1px solid #444;
+          background-color: #2a2a2a;
+          color: white;
+        `;
+        searchSection.appendChild(searchInput);
+        modalBox.appendChild(searchSection);
+
+        // Folder content section
+        const folderSection = document.createElement("div");
+        folderSection.style.cssText = `
+          flex: 1;
+          overflow-y: auto;
+          padding: 10px 0;
+          border-top: 1px solid #333;
+          border-bottom: 1px solid #333;
+        `;
+        modalBox.appendChild(folderSection);
+
+        // Button section
+        const buttonSection = document.createElement("div");
+        buttonSection.style.cssText = `
+          display: flex;
+          gap: 10px;
+          justify-content: flex-end;
+          padding: 10px 0;
+        `;
+        modalBox.appendChild(buttonSection);
 
         modalContainerBackground.addEventListener("click", () => {
           if (document.getElementById("modalBoxId")) {
@@ -369,27 +414,23 @@ const observer2 = new MutationObserver((mutations, observerInstance) => {
         });
 
         if (document.getElementById("modalBoxId")) {
-          renderNestedFolders(
-            folderData,
-            document.getElementById("modalBoxId")
-          ); // Call to set up the UI
+          renderNestedFolders(folderData, folderSection); // Call to set up the UI
 
-          const close = document.createElement("p");
+          const close = document.createElement("button");
           close.innerText = "Close";
-          close.style.borderRadius = "10px";
-          close.style.backgroundColor = "black";
-          close.style.color = "white";
-          (close.style.position = "absolute"), (close.style.top = "2%");
-          close.style.right = "2%";
-          close.style.cursor = "pointer";
+          close.style.cssText = `
+            padding: 8px 16px;
+            background-color: #333;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+          `;
 
           // Create save button
           const saveButton = document.createElement("button");
           saveButton.innerText = "Save";
           saveButton.style.cssText = `
-            position: absolute;
-            bottom: 2%;
-            right: 2%;
             padding: 8px 16px;
             background-color: #4CAF50;
             color: white;
@@ -398,8 +439,8 @@ const observer2 = new MutationObserver((mutations, observerInstance) => {
             cursor: pointer;
           `;
 
-          modalBox.appendChild(close);
-          modalBox.appendChild(saveButton);
+          buttonSection.appendChild(saveButton);
+          buttonSection.appendChild(close);
 
           // Save button click handler
           saveButton.addEventListener("click", () => {
@@ -409,7 +450,7 @@ const observer2 = new MutationObserver((mutations, observerInstance) => {
 
               // Add chat to selected folders
               selectedFolders.forEach((folder) => {
-                folder.children.push({
+                folder.children.unshift({
                   id: generateRandomId(),
                   title: name,
                   type: "file",
@@ -516,6 +557,17 @@ function renderNestedFolders(folderData, container) {
       folderCheckbox.style.cssText = `
         cursor: pointer; width: 16px; height: 16px;
       `;
+      folderCheckbox.style.borderRadius = "3px";
+      folderCheckbox.style.accentColor = "#ab68ff";
+      folderCheckbox.style.backgroundColor = "#2f2f2f";
+      folderCheckbox.addEventListener("click", () => {
+        checkBox.push(item.id);
+        if (folderCheckbox.checked) {
+          folderCheckbox.style.backgroundColor = "#ab68ff";
+        } else {
+          folderCheckbox.style.backgroundColor = "#2f2f2f";
+        }
+      });
       // Append checkbox to row
       folderRow.appendChild(folderCheckbox);
 
@@ -546,6 +598,7 @@ function renderNestedFolders(folderData, container) {
       color: ${textColor}; 
       margin: 0;
     `;
+    folderTitle.style.width = "100%";
 
     // Add toggle functionality for children
     let isExpanded = true;
@@ -611,7 +664,6 @@ function searchFolders(searchTerm) {
         container.style.display = "flex"; // Show matching subfolder
         localMatch = true; // Propagate match upwards
       }
-      
     });
 
     if (localMatch) {
@@ -625,32 +677,41 @@ function searchFolders(searchTerm) {
 function searchSubfolders(container, searchTerm) {
   let hasChildMatch = false;
   const subFolders = container.querySelectorAll(":scope > div"); // Get immediate subfolders
+
   subFolders.forEach((subFolder) => {
     const titleElement = subFolder.querySelector("p"); // Get the title
     const nestedContainers = subFolder.querySelectorAll(".subFolders"); // Nested subfolders
-
     let localMatch = false;
 
-    if (titleElement) {
-      // Check if the folder title matches the search term
-      localMatch = highlightText(titleElement, searchTerm);
+    if (titleElement && searchTerm) {
+      const text = titleElement.textContent;
+      if (text.toLowerCase().startsWith(searchTerm.toLowerCase())) {
+        const regex = new RegExp(`^(${searchTerm})`, "gi");
+        titleElement.innerHTML = text.replace(
+          regex,
+          '<span style="background-color: yellow; color: black">$1</span>'
+        );
+        localMatch = true;
+      } else {
+        titleElement.innerHTML = text;
+      }
     }
 
     // Recursively check deeper nested subfolders
     nestedContainers.forEach((nestedContainer) => {
+      if (nestedContainer.style.display === "none") {
+        nestedContainer.style.display = "flex";
+      }
       const childMatch = searchSubfolders(nestedContainer, searchTerm);
       if (childMatch) {
-        nestedContainer.style.display = "flex"; // Show matching nested subfolder
         localMatch = true; // Propagate match upwards
       }
-      
     });
 
     if (localMatch) {
-      subFolder.style.display = "flex"; // Show current folder if it matches or has a matching child
+      subFolder.style.display = "flex";
       hasChildMatch = true;
     }
-    
   });
 
   return hasChildMatch;
