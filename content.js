@@ -137,10 +137,9 @@ function createFolderElement(folder, index, depth) {
   margin-top: 10px; font-size: 14px;
   `;
 
-  folderTitle.addEventListener(
-    "click",
-    () => (window.location.href = folder.link)
-  );
+  folderTitle.addEventListener("click", () => {
+    if (folder.type === "file") window.location.href = folder.link;
+  });
 
   // Add drag and drop functionality
   if (folder.type === "file") {
@@ -580,7 +579,39 @@ const observer2 = new MutationObserver((mutations) => {
           background-color: #2a2a2a;
           color: white;
         `;
-              searchInput.id = "folderSearch";
+              searchInput.id = "modalFolderSearch";
+              
+              // Add search functionality
+              searchInput.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.trim().toLowerCase();
+                const allFolderElements = folderSection.querySelectorAll('div');
+                
+                allFolderElements.forEach(element => {
+                  const titleElement = element.querySelector('p');
+                  if (titleElement) {
+                    const folderName = titleElement.textContent.toLowerCase();
+                    const parentElement = element.parentElement;
+                    
+                    if (folderName.includes(searchTerm)) {
+                      element.style.display = 'flex';
+                      // Show parent containers if there's a match
+                      let parent = parentElement;
+                      while (parent && !parent.isSameNode(folderSection)) {
+                        parent.style.display = 'flex';
+                        parent = parent.parentElement;
+                      }
+                    } else {
+                      // Only hide if none of the children match
+                      const hasMatchingChild = Array.from(element.querySelectorAll('p'))
+                        .some(p => p.textContent.toLowerCase().includes(searchTerm));
+                      if (!hasMatchingChild) {
+                        element.style.display = 'none';
+                      }
+                    }
+                  }
+                });
+              });
+              
               searchSection.appendChild(searchInput);
               modalBox.appendChild(searchSection);
 
