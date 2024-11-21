@@ -5,6 +5,7 @@ let checkBox = [];
 chrome.storage.local.get(["folderData"], function (result) {
   if (result.folderData) {
     folderData = result.folderData;
+    console.log(folderData);
     // Re-render folders if UI is already initialized
     const foldersContainer = document.querySelector(".folders");
     if (foldersContainer) {
@@ -135,8 +136,177 @@ function createFolderElement(folder, index, depth) {
   }; cursor: pointer;
   margin-top: 10px; font-size: 14px;
   `;
+
+  folderTitle.addEventListener(
+    "click",
+    () => (window.location.href = folder.link)
+  );
+
+  // Add drag and drop functionality
+  if (folder.type === "file") {
+    folderTitle.draggable = true;
+    folderTitle.dataset.id = folder.id;
+    folderTitle.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData(
+        "text/plain",
+        JSON.stringify({
+          id: folder.id,
+          title: folder.title,
+          type: "file",
+        })
+      );
+      folderTitle.style.opacity = "0.5";
+    });
+    folderTitle.addEventListener("dragend", () => {
+      folderTitle.style.opacity = "1";
+    });
+  } else if (folder.type === "folder") {
+    folderTitle.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      folderTitle.style.backgroundColor = "rgb(100, 100, 100)";
+    });
+    folderTitle.addEventListener("dragleave", () => {
+      folderTitle.style.backgroundColor = backgroundColor;
+    });
+    folderTitle.addEventListener("drop", (e) => {
+      e.preventDefault();
+      folderTitle.style.backgroundColor = backgroundColor;
+
+      try {
+        const draggedItem = JSON.parse(e.dataTransfer.getData("text/plain"));
+        if (draggedItem.type === "file") {
+          // Remove from old location
+          removeItemFromFolder(folderData, draggedItem.id);
+          // Add to new location
+          folder.children.unshift({
+            id: draggedItem.id,
+            title: draggedItem.title,
+            type: "file",
+            children: [],
+          });
+          // Save and re-render
+          chrome.storage.local.set({ folderData: folderData });
+          renderFolders(folderData, document.querySelector(".folders"));
+        }
+      } catch (err) {
+        console.error("Error processing drop:", err);
+      }
+    });
+  }
+
+  // Add drag and drop functionality
+  if (folder.type === "file") {
+    folderTitle.draggable = true;
+    folderTitle.dataset.id = folder.id;
+    folderTitle.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData(
+        "text/plain",
+        JSON.stringify({
+          id: folder.id,
+          title: folder.title,
+          type: "file",
+        })
+      );
+      folderTitle.style.opacity = "0.5";
+    });
+    folderTitle.addEventListener("dragend", () => {
+      folderTitle.style.opacity = "1";
+    });
+  } else if (folder.type === "folder") {
+    folderTitle.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      folderTitle.style.backgroundColor = "rgb(100, 100, 100)";
+    });
+    folderTitle.addEventListener("dragleave", () => {
+      folderTitle.style.backgroundColor = backgroundColor;
+    });
+    folderTitle.addEventListener("drop", (e) => {
+      e.preventDefault();
+      folderTitle.style.backgroundColor = backgroundColor;
+
+      try {
+        const draggedItem = JSON.parse(e.dataTransfer.getData("text/plain"));
+        if (draggedItem.type === "file") {
+          // Remove from old location
+          removeItemFromFolder(folderData, draggedItem.id);
+          // Add to new location
+          folder.children.unshift({
+            id: draggedItem.id,
+            title: draggedItem.title,
+            type: "file",
+            children: [],
+          });
+          // Save and re-render
+          chrome.storage.local.set({ folderData: folderData });
+          renderFolders(folderData, document.querySelector(".folders"));
+        }
+      } catch (err) {
+        console.error("Error processing drop:", err);
+      }
+    });
+  }
   folderTitle.style.width = "100%";
   folderTitle.style.fontWeight = "600";
+
+  // Add tooltip for file type
+  if (folder.type === "file") {
+    const tooltip = document.createElement("div");
+    tooltip.style.cssText = `
+      position: fixed;
+      background-color: #1a1a1a;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 8px;
+      font-size: 14px;
+      pointer-events: none;
+      z-index: 10000;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      border: 1px solid #333;
+      display: none;
+      max-width: 300px;
+      word-wrap: break-word;
+      backdrop-filter: blur(5px);
+      transition: opacity 0.2s ease;
+      opacity: 0;
+    `;
+    tooltip.innerHTML = `
+      <div style="font-weight: 600; margin-bottom: 4px;">${folder.title}</div>
+    `;
+    document.body.appendChild(tooltip);
+
+    folderTitle.addEventListener("mousemove", (e) => {
+      tooltip.style.display = "block";
+      tooltip.style.opacity = "1";
+
+      // Calculate position to keep tooltip within viewport
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      let left = e.pageX + 15;
+      let top = e.pageY + 15;
+
+      // Adjust horizontal position if tooltip would overflow viewport
+      if (left + tooltipRect.width > viewportWidth) {
+        left = e.pageX - tooltipRect.width - 15;
+      }
+
+      // Adjust vertical position if tooltip would overflow viewport
+      if (top + tooltipRect.height > viewportHeight) {
+        top = e.pageY - tooltipRect.height - 15;
+      }
+
+      tooltip.style.left = left + "px";
+      tooltip.style.top = top + "px";
+    });
+
+    folderTitle.addEventListener("mouseleave", () => {
+      tooltip.style.opacity = "0";
+      setTimeout(() => {
+        tooltip.style.display = "none";
+      }, 200);
+    });
+  }
 
   folderElement.appendChild(folderTitle);
   // Add hover effect
@@ -282,32 +452,60 @@ const observer2 = new MutationObserver((mutations) => {
   mutations.forEach((mutation) => {
     mutation.addedNodes.forEach((node) => {
       if (node.nodeType === 1) {
-        // Check if it's an element node
         const historyItems = node.matches("li.relative")
           ? [node]
           : Array.from(node.querySelectorAll("li.relative"));
 
         historyItems.forEach((item) => {
-          // Check if button already exists and if the item has a first child
-          if (!item.querySelector(".add-chat-btn") && item.firstChild) {
+          if (item.firstChild && !item.firstChild.draggable) {
+            // Make chat items draggable
+            // console.log(item.firstChild.firstChild.href);
+            item.firstChild.draggable = true;
+            item.firstChild.addEventListener("dragstart", (e) => {
+              const chatTitle =
+                item.firstChild.firstChild.firstChild.innerText.replace(
+                  "+",
+                  ""
+                );
+              const chatId = generateRandomId();
+              e.dataTransfer.setData(
+                "text/plain",
+                JSON.stringify({
+                  id: chatId,
+                  title: chatTitle,
+                  type: "file",
+                  link: item.firstChild.firstChild.href,
+                })
+              );
+              item.firstChild.style.opacity = "0.5";
+            });
+
+            item.firstChild.addEventListener("dragend", () => {
+              item.firstChild.style.opacity = "1";
+            });
+
+            // Add the Add button
             const addChat = document.createElement("button");
             addChat.className = "add-chat-btn";
             addChat.innerText = "Add";
             addChat.style.cssText = `
-        padding: 4px 8px;
-        background-color: #2d2d2d;
-        color: #ffffff;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-        
-        display: none;
-        transition: background-color 0.2s;
-      `;
+              padding: 4px 8px;
+              background-color: #2d2d2d;
+              color: #ffffff;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 12px;
+              margin-left: auto;
+              display: none;
+              transition: background-color 0.2s;
+              place-items: center;
+              width: 100%;
+            `;
 
+            // Ensure the parent container has relative positioning
+            item.firstChild.style.position = "relative";
             item.firstChild.appendChild(addChat);
-            
 
             // Get the current page URL
             const URL = window.location.href;
@@ -319,12 +517,7 @@ const observer2 = new MutationObserver((mutations) => {
                   ""
                 );
 
-              // folderData.push({
-              //   id: generateRandomId(),
-              //   title: name,
-              //   type: "file",
-              //   children: [],
-              // });
+              localStorage.setItem("link", item.firstChild.firstChild.href);
               renderFolders(folderData, document.querySelector(".folders"));
               // const observer3 = new MutationObserver(
               //   (mutations, observerInstance) => {
@@ -467,6 +660,7 @@ const observer2 = new MutationObserver((mutations) => {
                         title: name,
                         type: "file",
                         children: [],
+                        link: localStorage.getItem("link"),
                       });
                     });
 
@@ -597,7 +791,10 @@ function renderNestedFolders(folderData, container) {
     }
 
     // Create the title
-    const folderTitle = document.createElement("p");
+    const folderTitle =
+      item.type === "folder"
+        ? document.createElement("p")
+        : document.createElement("a");
     folderTitle.textContent = item.title;
     const backgroundColor =
       item.type === "folder" ? colorGenerator(item.title) : "black";
@@ -744,7 +941,38 @@ function setupSearchBar() {
   });
 }
 
+function removeItemFromFolder(folders, itemId) {
+  for (let i = 0; i < folders.length; i++) {
+    if (folders[i].id === itemId) {
+      folders.splice(i, 1);
+      return true;
+    }
+    if (folders[i].children && folders[i].children.length > 0) {
+      if (removeItemFromFolder(folders[i].children, itemId)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function setupFolderUI(foldersContainer) {
   setupSearchBar();
   renderFolders(folderData, foldersContainer); // Display folder structure
+}
+
+// Helper function to remove items from folders
+function removeItemFromFolder(folders, itemId) {
+  for (let i = 0; i < folders.length; i++) {
+    if (folders[i].id === itemId) {
+      folders.splice(i, 1);
+      return true;
+    }
+    if (folders[i].children && folders[i].children.length > 0) {
+      if (removeItemFromFolder(folders[i].children, itemId)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
