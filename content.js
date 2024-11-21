@@ -1,5 +1,14 @@
 let folderData = []; // Array to store folder structure
 let checkBox = [];
+let bookmarks = []; // Array to store bookmarked chats
+
+// Load saved bookmarks when initializing
+chrome.storage.local.get(["bookmarks"], function (result) {
+  if (result.bookmarks) {
+    bookmarks = result.bookmarks;
+    console.log("Loaded bookmarks:", bookmarks);
+  }
+});
 
 // Load saved data when initializing
 chrome.storage.local.get(["folderData"], function (result) {
@@ -24,15 +33,17 @@ function colorGenerator(name) {
   let g = (hash & 0x00ff00) >> 8;
   let b = hash & 0x0000ff;
 
-  // Ensure colors are bright and provide contrast
-  r = (r + 100) % 255;
-  g = (g + 150) % 255;
-  b = (b + 200) % 255;
+  // Generate vibrant colors that pop on black background
+  r = Math.min(255, Math.max(100, (r + 155) % 255));
+  g = Math.min(255, Math.max(100, (g + 155) % 255));
+  b = Math.min(255, Math.max(100, (b + 155) % 255));
 
-  // Increase brightness for dark backgrounds
-  r = Math.min(255, r + 50);
-  g = Math.min(255, g + 50);
-  b = Math.min(255, b + 50);
+  // Ensure colors have good saturation
+  const avg = (r + g + b) / 3;
+  const saturationBoost = 1.2;
+  r = Math.min(255, Math.round(avg + (r - avg) * saturationBoost));
+  g = Math.min(255, Math.round(avg + (g - avg) * saturationBoost));
+  b = Math.min(255, Math.round(avg + (b - avg) * saturationBoost));
 
   return `rgb(${r}, ${g}, ${b})`;
 }
@@ -79,7 +90,7 @@ function createUI(targetElement) {
     <div style="display: flex; flex-direction: column; gap: 10px;">
       <div>
         <p>Bookmarks</p>
-        <div></div>
+        <div class="bookmarks-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
       </div>
       <div style="position: relative;">
         <p>Folders</p>
@@ -135,6 +146,10 @@ function createFolderElement(folder, index, depth) {
       : "white"
   }; cursor: pointer;
   margin-top: 10px; font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
   `;
 
   folderTitle.addEventListener("click", () => {
@@ -170,6 +185,13 @@ function createFolderElement(folder, index, depth) {
     folderTitle.addEventListener("drop", (e) => {
       e.preventDefault();
       folderTitle.style.backgroundColor = backgroundColor;
+
+      // Hide any active tooltip immediately on drop
+      if (activeTooltip) {
+        activeTooltip.style.display = "none";
+        document.body.removeChild(activeTooltip);
+        activeTooltip = null;
+      }
 
       try {
         const draggedItem = JSON.parse(e.dataTransfer.getData("text/plain"));
@@ -272,6 +294,7 @@ function createFolderElement(folder, index, depth) {
       <div style="font-weight: 600; margin-bottom: 4px;">${folder.title}</div>
     `;
     document.body.appendChild(tooltip);
+    activeTooltip = tooltip;
 
     folderTitle.addEventListener("mousemove", (e) => {
       tooltip.style.display = "block";
@@ -460,6 +483,9 @@ const observer2 = new MutationObserver((mutations) => {
             // Make chat items draggable
             // console.log(item.firstChild.firstChild.href);
             item.firstChild.draggable = true;
+            // Store tooltip reference
+            let activeTooltip = null;
+
             item.firstChild.addEventListener("dragstart", (e) => {
               const chatTitle =
                 item.firstChild.firstChild.firstChild.innerText.replace(
@@ -477,13 +503,39 @@ const observer2 = new MutationObserver((mutations) => {
                 })
               );
               item.firstChild.style.opacity = "0.5";
+
+              // Hide tooltip immediately during drag
+              if (activeTooltip) {
+                activeTooltip.style.display = "none";
+                document.body.removeChild(activeTooltip);
+                activeTooltip = null;
+              }
             });
 
             item.firstChild.addEventListener("dragend", () => {
               item.firstChild.style.opacity = "1";
+              // Ensure tooltip is removed after drag ends
+              if (activeTooltip) {
+                activeTooltip.style.opacity = "0";
+                setTimeout(() => {
+                  activeTooltip.style.display = "none";
+                  document.body.removeChild(activeTooltip);
+                  activeTooltip = null;
+                }, 200);
+              }
             });
 
             // Add the Add button
+            // Create button container
+            const buttonContainer = document.createElement("div");
+            buttonContainer.style.cssText = `
+              display: none;
+              grid-template-columns: 1fr 1fr;
+              gap: 4px;
+              width: 100%;
+            `;
+
+            // Add chat button
             const addChat = document.createElement("button");
             addChat.className = "add-chat-btn";
             addChat.innerText = "Add";
@@ -495,16 +547,68 @@ const observer2 = new MutationObserver((mutations) => {
               border-radius: 4px;
               cursor: pointer;
               font-size: 12px;
-              margin-left: auto;
-              display: none;
               transition: background-color 0.2s;
-              place-items: center;
-              width: 100%;
+            `;
+
+            // Bookmark button
+            const bookmarkBtn = document.createElement("button");
+            bookmarkBtn.className = "bookmark-btn";
+            bookmarkBtn.style.cssText = `
+              padding: 4px 8px;
+              background-color: #2d2d2d;
+              color: #ffffff;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 12px;
+              transition: background-color 0.2s;
             `;
 
             // Ensure the parent container has relative positioning
             item.firstChild.style.position = "relative";
-            item.firstChild.appendChild(addChat);
+
+            // Add buttons to container
+            buttonContainer.appendChild(addChat);
+            buttonContainer.appendChild(bookmarkBtn);
+            item.firstChild.appendChild(buttonContainer);
+
+            // Check if chat is bookmarked and update button text
+            const chatTitle =
+              item.firstChild.firstChild.firstChild.innerText.replace("+", "");
+            const chatLink = item.firstChild.firstChild.href;
+            const isBookmarked = bookmarks.some((b) => b.link === chatLink);
+            bookmarkBtn.innerText = isBookmarked
+              ? "★ Bookmarked"
+              : "☆ Bookmark";
+
+            // Bookmark button click handler
+            bookmarkBtn.addEventListener("click", () => {
+              const isCurrentlyBookmarked = bookmarks.some(
+                (b) => b.link === chatLink
+              );
+
+              if (isCurrentlyBookmarked) {
+                // Remove bookmark
+                bookmarks = bookmarks.filter((b) => b.link !== chatLink);
+                bookmarkBtn.innerText = "☆ Bookmark";
+              } else {
+                // Add bookmark
+                bookmarks.push({
+                  id: generateRandomId(),
+                  title: chatTitle,
+                  link: chatLink,
+                  timestamp: new Date().toISOString(),
+                });
+                bookmarkBtn.innerText = "★ Bookmarked";
+              }
+
+              // Save updated bookmarks
+              chrome.storage.local.set({ bookmarks: bookmarks });
+              console.log("Updated bookmarks:", bookmarks);
+
+              // Update bookmarks display in UI
+              updateBookmarksDisplay();
+            });
 
             // Get the current page URL
             const URL = window.location.href;
@@ -580,38 +684,41 @@ const observer2 = new MutationObserver((mutations) => {
           color: white;
         `;
               searchInput.id = "modalFolderSearch";
-              
+
               // Add search functionality
-              searchInput.addEventListener('input', (e) => {
+              searchInput.addEventListener("input", (e) => {
                 const searchTerm = e.target.value.trim().toLowerCase();
-                const allFolderElements = folderSection.querySelectorAll('div');
-                
-                allFolderElements.forEach(element => {
-                  const titleElement = element.querySelector('p');
+                const allFolderElements = folderSection.querySelectorAll("div");
+
+                allFolderElements.forEach((element) => {
+                  const titleElement = element.querySelector("p");
                   if (titleElement) {
                     const folderName = titleElement.textContent.toLowerCase();
                     const parentElement = element.parentElement;
-                    
+
                     if (folderName.includes(searchTerm)) {
-                      element.style.display = 'flex';
+                      element.style.display = "flex";
                       // Show parent containers if there's a match
                       let parent = parentElement;
                       while (parent && !parent.isSameNode(folderSection)) {
-                        parent.style.display = 'flex';
+                        parent.style.display = "flex";
                         parent = parent.parentElement;
                       }
                     } else {
                       // Only hide if none of the children match
-                      const hasMatchingChild = Array.from(element.querySelectorAll('p'))
-                        .some(p => p.textContent.toLowerCase().includes(searchTerm));
+                      const hasMatchingChild = Array.from(
+                        element.querySelectorAll("p")
+                      ).some((p) =>
+                        p.textContent.toLowerCase().includes(searchTerm)
+                      );
                       if (!hasMatchingChild) {
-                        element.style.display = 'none';
+                        element.style.display = "none";
                       }
                     }
                   }
                 });
               });
-              
+
               searchSection.appendChild(searchInput);
               modalBox.appendChild(searchSection);
 
@@ -743,10 +850,10 @@ const observer2 = new MutationObserver((mutations) => {
             });
 
             item.addEventListener("mouseover", () => {
-              addChat.style.display = "grid";
+              buttonContainer.style.display = "grid";
             });
             item.addEventListener("mouseleave", () => {
-              addChat.style.display = "none";
+              buttonContainer.style.display = "none";
             });
           }
         });
@@ -843,6 +950,10 @@ function renderNestedFolders(folderData, container) {
       font-size: 14px; 
       color: ${textColor}; 
       margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
     `;
     folderTitle.style.width = "100%";
     folderTitle.style.fontWeight = "600";
@@ -990,6 +1101,56 @@ function removeItemFromFolder(folders, itemId) {
 function setupFolderUI(foldersContainer) {
   setupSearchBar();
   renderFolders(folderData, foldersContainer); // Display folder structure
+  updateBookmarksDisplay(); // Display bookmarks
+}
+
+function updateBookmarksDisplay() {
+  const bookmarksList = document.querySelector(".bookmarks-list");
+  if (!bookmarksList) return;
+
+  bookmarksList.innerHTML = "";
+
+  bookmarks.forEach((bookmark) => {
+    const bookmarkElement = document.createElement("a");
+    bookmarkElement.href = bookmark.link;
+    bookmarkElement.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      background-color: #2a2a2a;
+      border-radius: 4px;
+      color: white;
+      text-decoration: none;
+      font-size: 14px;
+    `;
+
+    bookmarkElement.innerHTML = `
+      <span style="color: gold;">★</span>
+      <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        ${bookmark.title}
+      </span>
+      <button class="remove-bookmark" style="
+        background: none;
+        border: none;
+        color: #ff4444;
+        cursor: pointer;
+        padding: 4px;
+        font-size: 16px;
+      ">×</button>
+    `;
+
+    const removeBtn = bookmarkElement.querySelector(".remove-bookmark");
+    removeBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      bookmarks = bookmarks.filter((b) => b.id !== bookmark.id);
+      chrome.storage.local.set({ bookmarks: bookmarks });
+      updateBookmarksDisplay();
+    });
+
+    bookmarksList.appendChild(bookmarkElement);
+  });
 }
 
 // Helper function to remove items from folders
