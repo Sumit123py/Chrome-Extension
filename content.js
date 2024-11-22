@@ -24,28 +24,32 @@ chrome.storage.local.get(["folderData"], function (result) {
 });
 
 // Function to generate colors dynamically based on folder name
+// Predefined colors matching the image
+const predefinedColors = [
+  "rgb(255, 221, 51)", // Yellow
+  "rgb(128, 102, 204)", // Purple
+  "rgb(51, 153, 255)", // Blue
+  "rgb(102, 204, 153)", // Green
+  "#4B70F5",
+  "#FF204E",
+  "#46C2CB",
+  "#FF8A8A",
+  "#9BEC00",
+  "rgb(198, 231, 33)",
+  "rgb(45, 39, 194)",
+];
+
+// Function to generate colors based on input
 function colorGenerator(name) {
   let hash = 0;
+
+  // Generate a unique hash for the string
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
-  let r = (hash & 0xff0000) >> 16;
-  let g = (hash & 0x00ff00) >> 8;
-  let b = hash & 0x0000ff;
 
-  // Generate vibrant colors that pop on black background
-  r = Math.min(255, Math.max(100, (r + 155) % 255));
-  g = Math.min(255, Math.max(100, (g + 155) % 255));
-  b = Math.min(255, Math.max(100, (b + 155) % 255));
-
-  // Ensure colors have good saturation
-  const avg = (r + g + b) / 3;
-  const saturationBoost = 1.2;
-  r = Math.min(255, Math.round(avg + (r - avg) * saturationBoost));
-  g = Math.min(255, Math.round(avg + (g - avg) * saturationBoost));
-  b = Math.min(255, Math.round(avg + (b - avg) * saturationBoost));
-
-  return `rgb(${r}, ${g}, ${b})`;
+  // Pick a color from the palette based on the hash
+  return predefinedColors[Math.abs(hash) % predefinedColors.length];
 }
 
 // create a random id generator
@@ -135,9 +139,7 @@ function createFolderElement(folder, index, depth) {
   const folderTitle = document.createElement("p");
   folderTitle.textContent = folder.title;
   folderTitle.style.cssText = `
-  background-color: ${
-    folder.type === "folder" ? backgroundColor : "black"
-  }; /* Use colorGenerator function */
+  background-color: ${folder.type === "folder" ? backgroundColor : "black"};
   padding: 5px; border-radius: 5px; color: ${
     folder.type === "folder"
       ? isColorDark(backgroundColor)
@@ -296,7 +298,19 @@ function createFolderElement(folder, index, depth) {
     document.body.appendChild(tooltip);
     activeTooltip = tooltip;
 
+    let isDragging = false;
+
+    folderTitle.addEventListener("dragstart", () => {
+      isDragging = true;
+      tooltip.style.display = "none";
+    });
+
+    folderTitle.addEventListener("dragend", () => {
+      isDragging = false;
+    });
+
     folderTitle.addEventListener("mousemove", (e) => {
+      if (isDragging) return;
       tooltip.style.display = "block";
       tooltip.style.opacity = "1";
 
@@ -323,6 +337,7 @@ function createFolderElement(folder, index, depth) {
     });
 
     folderTitle.addEventListener("mouseleave", () => {
+      if (isDragging) return;
       tooltip.style.opacity = "0";
       setTimeout(() => {
         tooltip.style.display = "none";
@@ -772,7 +787,7 @@ const observer2 = new MutationObserver((mutations) => {
                 saveButton.innerText = "Save";
                 saveButton.style.cssText = `
             padding: 8px 16px;
-            background-color: #4CAF50;
+            background-color: #2196F3; /* Changed to blue */
             color: white;
             border: none;
             border-radius: 4px;
@@ -833,7 +848,7 @@ const observer2 = new MutationObserver((mutations) => {
                   }
                 });
 
-                observerInstance.disconnect(); // Disconnect observer after initialization
+                // observerInstance.disconnect(); // Disconnect observer after initialization
               }
               // }
               // );
@@ -885,13 +900,14 @@ function findFoldersById(folders, ids) {
 }
 
 function renderNestedFolders(folderData, container) {
+  console.log("fol", folderData);
   container.innerHTML = ""; // Clear the container
 
   folderData.forEach((item) => {
     // Create the folder element
     const folderElement = document.createElement("div");
     folderElement.style.cssText = `
-      display: flex; flex-direction: column; margin-left: 10px; margin-top: 5px;
+      display: flex; flex-direction: column; margin-left: 10px; margin-top: 10px;
     `;
 
     // Create a row container for checkbox and title
@@ -908,7 +924,8 @@ function renderNestedFolders(folderData, container) {
         cursor: pointer; width: 16px; height: 16px;
       `;
       folderCheckbox.style.borderRadius = "3px";
-      folderCheckbox.style.accentColor = "#ab68ff";
+      folderCheckbox.style.accentColor =
+        "#9C27B0"; /* Changed to deeper purple */
       folderCheckbox.style.backgroundColor = "#2f2f2f";
       folderCheckbox.addEventListener("click", () => {
         checkBox.push(item.id);
@@ -949,7 +966,6 @@ function renderNestedFolders(folderData, container) {
       cursor: pointer; 
       font-size: 14px; 
       color: ${textColor}; 
-      margin: 0;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -962,7 +978,7 @@ function renderNestedFolders(folderData, container) {
     let isExpanded = true;
     const childrenContainer = document.createElement("div");
     childrenContainer.style.cssText =
-      "margin-left: 15px; display: flex; flex-direction: column;";
+      "margin-left: 30px; display: flex; flex-direction: column;";
     folderTitle.addEventListener("click", () => {
       isExpanded = !isExpanded;
       childrenContainer.style.display = isExpanded ? "block" : "none";
@@ -1133,7 +1149,7 @@ function updateBookmarksDisplay() {
       <button class="remove-bookmark" style="
         background: none;
         border: none;
-        color: #ff4444;
+        color: #F44336; /* Changed to material design red */
         cursor: pointer;
         padding: 4px;
         font-size: 16px;

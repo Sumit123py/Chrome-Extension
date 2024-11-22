@@ -1,0 +1,102 @@
+@keyframes modalOpen {
+  0% {
+    transform: scale(0) translate(var(--startX), var(--startY));
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translate(-50%, -50%);
+    opacity: 1;
+  }
+}
+
+@keyframes modalClose {
+  0% {
+    transform: scale(1) translate(-50%, -50%);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0) translate(var(--endX), var(--endY));
+    opacity: 0;
+  }
+}
+
+@keyframes moveToFolder {
+  0% {
+    transform: scale(1) translate(0, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.1) translate(var(--moveX), var(--moveY));
+    opacity: 0;
+  }
+}
+
+@keyframes folderExpand {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 1000px;
+    opacity: 1;
+  }
+}
+
+@keyframes folderCollapse {
+  from {
+    max-height: 1000px;
+    opacity: 1;
+  }
+  to {
+    max-height: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes buttonHover {
+  from {
+    background-color: #2d2d2d;
+  }
+  to {
+    background-color: rgb(100, 100, 100);
+  }
+}
+
+@keyframes addItemToFolder {
+  0% {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-opening {
+  animation: modalOpen 0.3s ease-out forwards;
+}
+
+.modal-closing {
+  animation: modalClose 0.3s ease-in forwards;
+}
+
+.moving-chat {
+  animation: moveToFolder 0.5s ease-in-out forwards;
+}
+
+.folder-expand {
+  animation: folderExpand 0.3s ease-out forwards;
+}
+
+.folder-collapse {
+  animation: folderCollapse 0.3s ease-in forwards;
+}
+
+.button-hover {
+  animation: buttonHover 0.2s ease forwards;
+}
+
+.add-item-animation {
+  animation: addItemToFolder 0.3s ease-out forwards;
+}
