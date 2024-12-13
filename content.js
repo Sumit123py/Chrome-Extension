@@ -23,34 +23,184 @@ chrome.storage.local.get(["folderData"], function (result) {
   }
 });
 
-// Function to generate colors dynamically based on folder name
-// Predefined colors matching the image
-const predefinedColors = [
-  "rgb(255, 221, 51)", // Yellow
-  "rgb(128, 102, 204)", // Purple
-  "rgb(51, 153, 255)", // Blue
-  "rgb(102, 204, 153)", // Green
-  "#4B70F5",
-  "#FF204E",
-  "#46C2CB",
-  "#FF8A8A",
-  "#9BEC00",
-  "rgb(198, 231, 33)",
-  "rgb(45, 39, 194)",
-];
+const observer4 = new MutationObserver((mutations, observerInstance) => {
+  // Locate the target element
+  const targetElement = document.querySelector(
+    "span[data-testid='blocking-initial-modals-done']"
+  );
 
-// Function to generate colors based on input
-function colorGenerator(name) {
-  let hash = 0;
+  if (
+    targetElement &&
+    targetElement.nextElementSibling &&
+    targetElement.nextElementSibling.firstChild
+  ) {
+    const widthContainer = targetElement.nextElementSibling.firstChild;
 
-  // Generate a unique hash for the string
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    // Ensure the container has position: relative for absolute positioning
+    widthContainer.style.position = "relative";
+
+    // Hide the scrollbars but keep scrolling functionality
+    widthContainer.style.overflow = "auto";
+    widthContainer.style.scrollbarWidth = "none"; // Firefox
+    widthContainer.style.msOverflowStyle = "none"; // IE and Edge
+
+    // Hide Webkit-based scrollbars (Chrome, Safari, Edge Chromium)
+    const css = `
+        ::-webkit-scrollbar {
+          display: none;
+        }
+      `;
+    const styleSheet = document.createElement("style");
+    styleSheet.type = "text/css";
+    styleSheet.innerText = css;
+    document.head.appendChild(styleSheet);
+
+    // Create the custom slider element
+    const slider = document.createElement("div");
+    slider.innerText = "⋮⋮";
+    slider.style.color = "rgb(128, 102, 204)";
+    slider.style.position = "absolute";
+    slider.style.top = "10%";
+    slider.style.right = "0";
+    slider.style.transform = "translateY(-50%)";
+    slider.style.zIndex = "10000000";
+    slider.style.width = "30px";
+    slider.style.height = "30px";
+    slider.style.backgroundColor = "rgba(128, 102, 204, 0.2)";
+    slider.style.border = "1px solid rgb(128, 102, 204)";
+    slider.style.cursor = "ew-resize";
+    slider.style.borderRadius = "50%";
+    slider.style.display = "grid";
+    slider.style.placeItems = "center";
+
+    // Append the slider if it hasn't already been appended
+    // if (!widthContainer.querySelector("div")) {
+    widthContainer.appendChild(slider);
+    // }
+
+    // Add drag functionality
+    let isDragging = false;
+    let startX;
+    let startWidth;
+
+    slider.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startWidth = widthContainer.offsetWidth;
+
+      // Prevent text selection during dragging
+      document.body.style.userSelect = "none";
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (!isDragging) return;
+
+      const deltaX = e.clientX - startX;
+      const newWidth = Math.max(50, startWidth + deltaX); // Minimum width of 50px
+      widthContainer.style.width = `${newWidth}px`;
+
+      // Adjust the width of the first child element
+      if (widthContainer.firstChild) {
+        widthContainer.firstChild.style.width = `${newWidth}px`;
+      }
+    });
+
+    document.addEventListener("mouseup", () => {
+      if (isDragging) {
+        isDragging = false;
+
+        // Restore text selection
+        document.body.style.userSelect = "";
+      }
+    });
+
+    // Stop observing once the target is found
+    observerInstance.disconnect();
+  }
+});
+
+// Observe changes in the DOM to locate the target element
+observer4.observe(document.body, { childList: true, subtree: true });
+
+// Content script that runs on chat.openai.com
+// ... (previous code remains the same until colorGenerator section)
+
+// Enhanced color palette with semantic colors
+const colorPalette = {
+  // Document/File related
+  document: ["#4B70F5", "#3F51B5", "#2196F3", "#03A9F4", "#00BCD4"],
+
+  // Organization/Structure related
+  organization: ["#009688", "#4CAF50", "#8BC34A", "#CDDC39", "#46C2CB"],
+
+  // Important/Priority related
+  important: ["#FF204E", "#F44336", "#FF5722", "#FF8A8A", "#FF9800"],
+
+  // Project related
+  project: ["#9C27B0", "#673AB7", "#795548", "#607D8B", "#9575CD"],
+
+  // Archive/Storage related
+  archive: ["#757575", "#9E9E9E", "#7E57C2", "#5C6BC0", "#42A5F5"],
+
+  // Default colors for other categories
+  default: ["#46C2CB", "#FF8A8A", "#9BEC00", "#4B70F5", "#FF204E"],
+};
+
+// Keywords to categorize folders
+const categoryKeywords = {
+  document: ["docs", "documents", "files", "notes", "reports", "papers"],
+  organization: ["admin", "organize", "structure", "system", "manage"],
+  important: ["important", "urgent", "priority", "critical", "essential"],
+  project: ["project", "work", "task", "client", "development"],
+  archive: ["archive", "backup", "storage", "old", "completed"],
+};
+
+function determineCategory(folderName) {
+  const nameLower = folderName.toLowerCase();
+
+  // Check each category's keywords
+  for (const [category, keywords] of Object.entries(categoryKeywords)) {
+    if (keywords.some((keyword) => nameLower.includes(keyword))) {
+      return category;
+    }
   }
 
-  // Pick a color from the palette based on the hash
-  return predefinedColors[Math.abs(hash) % predefinedColors.length];
+  return "default";
 }
+
+function generateConsistentHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash);
+}
+
+function colorGenerator(name) {
+  // Remove emoji and trim
+  const cleanName = name
+    .replace(/[\u{1F300}-\u{1F9FF}]|[\u{1F600}-\u{1F64F}]/gu, "")
+    .trim();
+
+  // Determine the category based on folder name
+  const category = determineCategory(cleanName);
+
+  // Get the color palette for the category
+  const palette = colorPalette[category];
+
+  // Generate a consistent hash for the folder name
+  const hash = generateConsistentHash(cleanName);
+
+  // Use the hash to select a color from the palette
+  const colorIndex = hash % palette.length;
+
+  // Return the selected color
+  return palette[colorIndex];
+}
+
+// ... (rest of the file remains unchanged)
 
 // create a random id generator
 function generateRandomId() {
@@ -348,11 +498,10 @@ function createFolderElement(folder, index, depth) {
   folderElement.appendChild(folderTitle);
   // Add hover effect
   folderTitle.addEventListener("mouseover", () => {
-    folderTitle.style.backgroundColor = "rgb(100, 100, 100)";
+    folderTitle.style.opacity = "0.8";
   });
   folderTitle.addEventListener("mouseleave", () => {
-    folderTitle.style.backgroundColor =
-      folder.type === "folder" ? backgroundColor : "black";
+    folderTitle.style.opacity = "1";
   });
 
   const subfolderContainer = document.createElement("div");
@@ -382,13 +531,13 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
   const menu = document.createElement("div");
   menu.style.cssText = `
     position: absolute; background-color: #1a1a1a; color: white; border-radius: 5px;
-    display: none; flex-direction: column; gap: 5px; padding: 10px; z-index: 10000;
+    display: none; flex-direction: column; gap: 5px; padding: 5px; z-index: 10000;
     border: 1px solid #333;
   `;
 
   menu.innerHTML = `
-    <button class="contextOption">➕ Add folder</button>
-    <button class="contextOption">❌ Delete Folder</button>
+    <button class="contextOption" style=" padding: 5px;">➕ Add folder</button>
+    <button class="contextOption" style=" padding: 5px;">❌ Delete Folder</button>
   `;
 
   document.body.appendChild(menu);
@@ -408,7 +557,7 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     menu.querySelectorAll(".contextOption");
 
   addSubfolderButton.addEventListener("click", () => {
-    if (depth >= 2) {
+    if (depth >= 20) {
       alert("Maximum nesting depth is 3.");
       return;
     }

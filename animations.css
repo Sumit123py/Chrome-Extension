@@ -58,7 +58,7 @@
     background-color: #2d2d2d;
   }
   to {
-    background-color: rgb(100, 100, 100);
+    background-color: rgba(231, 231, 231, 0.037);
   }
 }
 
