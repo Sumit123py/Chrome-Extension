@@ -143,7 +143,16 @@ const colorPalette = {
   archive: ["#757575", "#9E9E9E", "#7E57C2", "#5C6BC0", "#42A5F5"],
 
   // Default colors for other categories
-  default: ["#46C2CB", "#FF8A8A", "#9BEC00", "#4B70F5", "#FF204E"],
+  default: [
+    "#46C2CB",
+    "#FF9800",
+    "#9BEC00",
+    "#4B70F5",
+    "#FF204E",
+    "#FFC400",
+    "#7E57C2",
+    "#42A5F5",
+  ],
 };
 
 // Keywords to categorize folders
