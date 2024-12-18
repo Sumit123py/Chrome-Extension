@@ -652,7 +652,10 @@ const observer2 = new MutationObserver((mutations) => {
           : Array.from(node.querySelectorAll("li.relative"));
 
         historyItems.forEach((item) => {
-          if (item.firstChild && !item.firstChild.draggable) {
+
+          
+
+          if (item.firstChild) {
             // Make chat items draggable
             // console.log(item.firstChild.firstChild.href);
             item.firstChild.draggable = true;
@@ -739,6 +742,7 @@ const observer2 = new MutationObserver((mutations) => {
 
             // Ensure the parent container has relative positioning
             item.firstChild.style.position = "relative";
+            item.style.transition = '0.5s all ease'
 
             // Add buttons to container
             buttonContainer.appendChild(addChat);
@@ -1024,9 +1028,14 @@ const observer2 = new MutationObserver((mutations) => {
 
             item.addEventListener("mouseover", () => {
               buttonContainer.style.display = "grid";
+              item.style.height = '70px'
+
+
             });
             item.addEventListener("mouseleave", () => {
               buttonContainer.style.display = "none";
+              item.style.height = 'unset'
+
             });
           }
         });
