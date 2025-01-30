@@ -1,24 +1,31 @@
 {
   "manifest_version": 3,
   "name": "ChatGpt folder Extension",
-  "version": "1.0",
+  "version": "3.0",
   "description": "A simple extension to interact with webpages.",
   "permissions": ["activeTab", "scripting", "tabs", "storage"],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>",
+    "https://iiokcprfxttdlszwhpma.supabase.co/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
       "16": "imresizer-1731312355421.png"
     }
   },
+  "content_security_policy": {
+    "policy": "script-src 'self' **https://cdn.jsdelivr.net**; object-src 'self';"
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
-      "type": "module"
+      "css": ["styles.css"]
     }
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.bundle.mjs",
+    "type": "module"
   }
 }

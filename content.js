@@ -1,4 +1,4 @@
-let folderData = []; // Array to store folder structure
+console.log("Selected folders:", selectedFolders);let folderData = []; // Array to store folder structure
 let checkBox = [];
 let bookmarks = []; // Array to store bookmarked chats
 
@@ -23,7 +23,198 @@ chrome.storage.local.get(["folderData"], function (result) {
   }
 });
 
+function saveChat(chat) {
+  chrome.runtime.sendMessage({ action: "saveChat", chat }, (response) => {
+    if (response.error)
+      console.error("Error saving chat to Supabase:", response.error);
+    else console.log("Saved chat to Supabase:", response.data);
+  });
+}
+
+// 🔹 Function to save a bookmark to Supabase
+function saveBookmark(bookmark) {
+  chrome.runtime.sendMessage(
+    { action: "saveBookmark", bookmark },
+    (response) => {
+      if (response.error)
+        console.error("Error saving to Supabase:", response.error);
+      else console.log("Saved to Supabase:", response.data);
+    }
+  );
+}
+
+// 🔹 Function to save a folder to Supabase
+function saveFolder(folder) {
+  chrome.runtime.sendMessage({ action: "saveFolder", folder }, (response) => {
+    if (response.error)
+      console.error("Error saving folder to Supabase:", response.error);
+    else console.log("Saved folder to Supabase:", response.data);
+  });
+}
+
+function fetchData(retryCount = 0) {
+  chrome.runtime.sendMessage({ action: "getData" }, (response) => {
+    if (response.error) {
+      console.error("Error fetching data from Supabase:", response.error);
+      return;
+    }
+
+    console.log("Fetching Data...");
+
+    if (
+      !response.folders ||
+      !response.bookmarks ||
+      !response.chats ||
+      !response.chatFolders
+    ) {
+      console.warn("Data not fully loaded, retrying...");
+      if (retryCount < 5) {
+        // Retry max 5 times
+        setTimeout(() => fetchData(retryCount + 1), 500);
+      }
+      return;
+    }
+
+    // 🔹 Ensure bookmarks are properly initialized
+    bookmarks = response.bookmarks.map((bookmark) => ({
+      id: bookmark?.id,
+      title: bookmark?.title || "Untitled Bookmark",
+      link: bookmark?.link || "#",
+    }));
+
+    console.log("Loaded Bookmarks:", bookmarks); // 🔹 Debugging: Check if bookmarks are fetched
+
+    // 🔹 Ensure all folders are initialized properly
+    let allFolders = response.folders.map((folder) => ({
+      id: folder?.id,
+      title: folder?.title || "Untitled Folder",
+      type: "folder",
+      parent_id: folder?.parent_id || null,
+      children: [],
+    }));
+
+    // 🔹 Convert list into a nested structure
+    folderData = [];
+    const folderMap = {};
+
+    // 🔹 Create a map of all folders
+    allFolders.forEach((folder) => {
+      folderMap[folder.id] = folder;
+      if (folder.parent_id === null) {
+        folderData.push(folder);
+      }
+    });
+
+    // 🔹 Assign subfolders to their parent folders
+    allFolders.forEach((folder) => {
+      if (folder.parent_id !== null) {
+        const parentFolder = folderMap[folder.parent_id];
+        if (parentFolder) {
+          parentFolder.children.push(folder);
+        }
+      }
+    });
+
+    // 🔹 Place chats inside their respective folders
+    response.chatFolders.forEach((relation) => {
+      const folder = folderMap[relation.folder_id];
+      if (folder) {
+        folder.children.push({
+          id: relation.chat_id,
+          title: relation.chats?.title || "Untitled Chat",
+          link: relation.chats?.link || "#",
+          type: "file",
+        });
+      }
+    });
+
+    console.log("Final Folder Structure:", folderData);
+
+    // 🔹 Update UI only when all data is loaded
+    if (folderData.length > 0 || bookmarks.length > 0 || chats.length > 0) {
+      renderFolders(folderData, document.querySelector(".folders"));
+      updateBookmarksDisplay(); // 🔹 Ensure this runs after bookmarks are set
+    } else {
+      console.warn("Data still empty, retrying...");
+      if (retryCount < 5) {
+        setTimeout(() => fetchData(retryCount + 1), 500);
+      }
+    }
+  });
+}
+
+// 🔹 Call `fetchData` when the extension loads
+fetchData();
+
+// const link = document.createElement("link");
+// link.rel = "stylesheet";
+// link.href = chrome.runtime.getURL("styles.css");
+// document.head.appendChild(link);
+
 const observer4 = new MutationObserver((mutations, observerInstance) => {
+  // Search section
+  const searchSection = document.createElement("div");
+  searchSection.style.cssText = `
+  width: 100%;
+  padding: 10px 0;
+`;
+  const searchInput = document.createElement("input");
+  searchInput.type = "text";
+  searchInput.placeholder = "Search Chats...";
+  searchInput.style.cssText = `
+  width: 100%;
+  padding: 8px;
+  border-radius: 5px;
+  border: 1px solid #444;
+  background-color: black;
+  color: white;
+`;
+
+  // Function to search and filter items using startsWith
+  function searchAndFilterHistoryItems(searchText) {
+    const allHistoryItems = Array.from(
+      document.querySelectorAll("li.relative")
+    );
+
+    allHistoryItems.forEach((item) => {
+      const textElement = item.firstChild?.firstChild?.firstChild;
+      const originalText = textElement?.innerText || "";
+
+      if (searchText.trim() === "") {
+        // Show all items and reset text if search input is empty
+        item.style.display = "block";
+        textElement.innerHTML = originalText;
+        return;
+      }
+
+      if (originalText.toLowerCase().startsWith(searchText.toLowerCase())) {
+        // Highlight the portion of the text that starts with the input
+        const highlightedText = `<span style="color: white; background: #7E57C2; font-weight: bold; letter-spacing: 1.2px">${originalText.slice(
+          0,
+          searchText.length
+        )}</span>${originalText.slice(searchText.length)}`;
+        textElement.innerHTML = highlightedText;
+        item.style.display = "block"; // Show matching item
+      } else {
+        item.style.display = "none"; // Hide non-matching items
+      }
+    });
+  }
+
+  // Add event listener to the search input
+  searchInput.addEventListener("input", (e) =>
+    searchAndFilterHistoryItems(e.target.value)
+  );
+
+  const chatsSearchParent = document.querySelector(
+    "li[data-testid='history-item-3']"
+  ).parentElement.parentElement;
+
+  const parentContainer = chatsSearchParent.parentElement;
+  parentContainer.insertBefore(searchSection, parentContainer.firstChild);
+
+  searchSection.appendChild(searchInput);
+
   // Locate the target element
   const targetElement = document.querySelector(
     "span[data-testid='blocking-initial-modals-done']"
@@ -152,6 +343,94 @@ const colorPalette = {
     "#FFC400",
     "#7E57C2",
     "#42A5F5",
+    "#FF5733",
+    "#28B463",
+    "#AF7AC5",
+    "#F4D03F",
+    "#5DADE2",
+    "#F1948A",
+    "#82E0AA",
+    "#BB8FCE",
+    "#FF5722",
+    "#4CAF50",
+    "#8E44AD",
+    "#FFEB3B",
+    "#2196F3",
+    "#FF7043",
+    "#66BB6A",
+    "#9575CD",
+    "#FFD54F",
+    "#26C6DA",
+    "#EC407A",
+    "#AB47BC",
+    "#7E57C2",
+    "#FFA726",
+    "#26A69A",
+    "#9CCC65",
+    "#C2185B",
+    "#FFC107",
+    "#673AB7",
+    "#F44336",
+    "#00BCD4",
+    "#CDDC39",
+    "#3F51B5",
+    "#FF5252",
+    "#69F0AE",
+    "#536DFE",
+    "#FF80AB",
+    "#448AFF",
+    "#F06292",
+    "#7C4DFF",
+    "#80CBC4",
+    "#FFAB00",
+    "#FF6F00",
+    "#64DD17",
+    "#D32F2F",
+    "#C0CA33",
+    "#5E35B1",
+    "#E64A19",
+    "#29B6F6",
+    "#9C27B0",
+    "#E91E63",
+    "#8BC34A",
+    "#D4E157",
+    "#81D4FA",
+    "#EF5350",
+    "#7E57C2",
+    "#FFB74D",
+    "#B39DDB",
+    "#03A9F4",
+    "#FF4081",
+    "#BA68C8",
+    "#388E3C",
+    "#B2FF59",
+    "#009688",
+    "#FFE57F",
+    "#689F38",
+    "#512DA8",
+    "#C51162",
+    "#4DD0E1",
+    "#FF7043",
+    "#FFCDD2",
+    "#9FA8DA",
+    "#B3E5FC",
+    "#81C784",
+    "#FFC107",
+    "#D50000",
+    "#E040FB",
+    "#64B5F6",
+    "#F9A825",
+    "#A5D6A7",
+    "#BDBDBD",
+    "#757575",
+    "#DD2C00",
+    "#76FF03",
+    "#0097A7",
+    "#43A047",
+    "#E65100",
+    "#E53935",
+    "#512DA8",
+    "#FFB300",
   ],
 };
 
@@ -242,11 +521,12 @@ function createUI(targetElement) {
   container.style.cssText = `
     padding: 15px;
     margin: 10px 0;
-    background-color: #1a1a1a;
+    background-color: black;
     border-radius: 8px;
     color: #ffffff;
     font-weight: normal;
-    border: 1px solid #333;
+    box-shadow: rgba(221, 219, 219, 0.1) 0px 30px 90px;
+    border: 1px solid black;
   `;
 
   container.innerHTML = `
@@ -259,7 +539,7 @@ function createUI(targetElement) {
         <p>Folders</p>
         <button 
           id="addFolder"
-          style="padding: 5px; font-size: 14px; background-color: #2a2a2a; width: 100%; color: white; border: 1px solid #444; border-radius: 5px;"
+          style="padding: 5px; font-size: 14px; background-color: black; width: 100%; color: white;  border: 1px solid #444; border-radius: 5px;"
         >
           📁 New Folder
         </button>
@@ -267,7 +547,7 @@ function createUI(targetElement) {
           type="text" 
           id="folderSearch"
           placeholder="Search folders and chats..."
-          style="margin-top: 10px; padding: 5px; font-size: 14px; background-color: #2a2a2a; width: 100%; color: white; border: 1px solid #444; border-radius: 5px;"
+          style="margin-top: 10px; padding: 5px; font-size: 14px; background-color: black; width: 100%; color: white; border: 1px solid #444; border-radius: 5px;"
         >
         <div class="folders" style="display: flex; flex-direction: column; margin-top: 10px;"></div>
       </div>
@@ -281,12 +561,52 @@ function createUI(targetElement) {
 }
 
 function renderFolders(folderArray, container, depth = 0) {
+  if (!Array.isArray(folderArray) || folderArray.length === 0) {
+    console.warn("No folders to render.");
+    return;
+  }
+
   container.innerHTML = ""; // Clear existing folders
 
-  folderArray.forEach((folder, index) => {
-    const folderElement = createFolderElement(folder, index, depth);
+  folderArray.forEach((folder) => {
+    if (!folder) return; // Skip undefined folders
+
+    const folderElement = createFolderElement(folder, depth);
+    console.log("Rendering Folder:", folder);
+
+    // 🔹 Ensure `folder.children` exists
+    if (!Array.isArray(folder.children)) {
+      folder.children = [];
+    }
+
     container.appendChild(folderElement);
   });
+}
+
+function createFolder(parentId = null) {
+  const folderName = prompt("Enter Folder Name:");
+  if (!folderName) return;
+
+  const newFolder = {
+    id: Math.floor(Math.random() * 1000000),
+    title: folderName,
+    parent_id: parentId, // Assign parent folder ID if provided
+    type: "folder",
+    children: [],
+  };
+
+  // 🔹 Save new folder to Supabase
+  chrome.runtime.sendMessage(
+    { action: "saveFolder", folder: newFolder },
+    (response) => {
+      if (response.error) {
+        console.error("Error saving folder to Supabase:", response.error);
+      } else {
+        console.log("Folder successfully saved:", response.data);
+        fetchData(); // Reload data after creating folder
+      }
+    }
+  );
 }
 
 function createFolderElement(folder, index, depth) {
@@ -317,8 +637,26 @@ function createFolderElement(folder, index, depth) {
     if (folder.type === "file") window.location.href = folder.link;
   });
 
+  folderTitle.addEventListener("contextmenu", () => {
+    sessionStorage.setItem("folderId", folder.id);
+  });
+
   // Add drag and drop functionality
-  if (folder.type === "file") {
+
+  function findItemById(folderData, id) {
+    for (const folder of folderData) {
+      if (folder.id === id) {
+        return folder;
+      }
+      if (folder.children) {
+        const found = findItemById(folder.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  if (folder.type === "file" || folder.type === "folder") {
     folderTitle.draggable = true;
     folderTitle.dataset.id = folder.id;
     folderTitle.addEventListener("dragstart", (e) => {
@@ -327,7 +665,7 @@ function createFolderElement(folder, index, depth) {
         JSON.stringify({
           id: folder.id,
           title: folder.title,
-          type: "file",
+          type: folder.type,
         })
       );
       folderTitle.style.opacity = "0.5";
@@ -335,14 +673,18 @@ function createFolderElement(folder, index, depth) {
     folderTitle.addEventListener("dragend", () => {
       folderTitle.style.opacity = "1";
     });
-  } else if (folder.type === "folder") {
+  }
+
+  if (folder.type === "folder") {
     folderTitle.addEventListener("dragover", (e) => {
       e.preventDefault();
       folderTitle.style.backgroundColor = "rgb(100, 100, 100)";
     });
+
     folderTitle.addEventListener("dragleave", () => {
       folderTitle.style.backgroundColor = backgroundColor;
     });
+
     folderTitle.addEventListener("drop", (e) => {
       e.preventDefault();
       folderTitle.style.backgroundColor = backgroundColor;
@@ -356,16 +698,41 @@ function createFolderElement(folder, index, depth) {
 
       try {
         const draggedItem = JSON.parse(e.dataTransfer.getData("text/plain"));
-        if (draggedItem.type === "file") {
+
+        if (draggedItem.id === folder.id) {
+          console.warn("Cannot drop a folder into itself.");
+          return;
+        }
+
+        if (draggedItem.type === "file" || draggedItem.type === "folder") {
+          // Find the dragged folder or file and preserve its children if it's a folder
+          const draggedItemData = findItemById(folderData, draggedItem.id);
+
           // Remove from old location
           removeItemFromFolder(folderData, draggedItem.id);
+
+          // Save to Supabase
+          chrome.runtime.sendMessage(
+            {
+              action: "saveChatToFolder",
+              chatId: draggedItem.id,
+              folderId: folder.id,
+            },
+            (response) => {
+              if (response.error)
+                console.error("Error saving chat to folder:", response.error);
+              else console.log("Chat successfully moved:", response.data);
+            }
+          );
+
           // Add to new location
           folder.children.unshift({
-            id: draggedItem.id,
-            title: draggedItem.title,
-            type: "file",
-            children: [],
+            id: draggedItemData.id,
+            title: draggedItemData.title,
+            type: draggedItemData.type,
+            children: draggedItemData.children || [], // Preserve children if it's a folder
           });
+
           // Save and re-render
           chrome.storage.local.set({ folderData: folderData });
           renderFolders(folderData, document.querySelector(".folders"));
@@ -431,7 +798,7 @@ function createFolderElement(folder, index, depth) {
   folderTitle.style.fontWeight = "600";
 
   // Add tooltip for file type
-  if (folder.type === "file") {
+  if (folder) {
     const tooltip = document.createElement("div");
     tooltip.style.cssText = `
       position: fixed;
@@ -519,6 +886,9 @@ function createFolderElement(folder, index, depth) {
   `;
   subfolderContainer.className = "subFolders";
   subfolderContainer.style.flexDirection = "column";
+  subfolderContainer.style.borderLeftColor = "#ab68ff";
+  subfolderContainer.style.borderLeftWidth = "2px";
+  subfolderContainer.style.marginTop = "5px";
   renderFolders(folder.children, subfolderContainer, depth + 1);
   folderElement.appendChild(subfolderContainer);
 
@@ -539,15 +909,23 @@ function createFolderElement(folder, index, depth) {
 function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
   const menu = document.createElement("div");
   menu.style.cssText = `
-    position: absolute; background-color: #1a1a1a; color: white; border-radius: 5px;
-    display: none; flex-direction: column; gap: 5px; padding: 5px; z-index: 10000;
-    border: 1px solid #333;
+    position: absolute; background-color: #2a2a2a; color: white; border-radius: 8px;
+    display: none; flex-direction: column; gap: 8px; padding: 10px; z-index: 10000;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    border: 1px solid #444;
+    font-family: Arial, sans-serif;
   `;
 
   menu.innerHTML = `
-    <button class="contextOption" style=" padding: 5px;">➕ Add folder</button>
-    <button class="contextOption" style=" padding: 5px;">❌ Delete Folder</button>
+    <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer;">➕ Add Folder</button>
+    <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer;">✏️ Rename</button>
+    <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer; color: #ff4d4d;">🗑️ Delete</button>
   `;
+
+  // Remove the "Add Folder" button if the item is a file
+  if (folder.type === "file") {
+    menu.querySelector("button").style.display = "none"; // Hide "Add Folder"
+  }
 
   document.body.appendChild(menu);
 
@@ -562,9 +940,10 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     menu.style.display = "none";
   });
 
-  const [addSubfolderButton, deleteFolderButton] =
+  const [addSubfolderButton, renameButton, deleteFolderButton] =
     menu.querySelectorAll(".contextOption");
 
+  // Add Subfolder
   addSubfolderButton.addEventListener("click", () => {
     if (depth >= 20) {
       alert("Maximum nesting depth is 3.");
@@ -572,6 +951,16 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     }
     const name = prompt("Enter subfolder name:");
     if (name) {
+      const newFolder = {
+        title: `📁${name}`,
+        type: "folder",
+        children: null,
+        parent_id: parseInt(sessionStorage.getItem("folderId")),
+      };
+
+      // Save to Supabase
+      saveFolder(newFolder);
+
       folder.children.push({
         id: generateRandomId(),
         title: `📁${name}`,
@@ -583,6 +972,18 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     }
   });
 
+  // Rename Folder/File
+  renameButton.addEventListener("click", () => {
+    const newName = prompt("Enter new name:", folder.title.replace("📁", ""));
+    if (newName) {
+      folder.title = folder.type === "folder" ? `📁${newName}` : newName;
+      renderFolders(folderData, document.querySelector(".folders"));
+      // Save updated folder data to storage
+      chrome.storage.local.set({ folderData: folderData });
+    }
+  });
+
+  // Delete Folder/File
   deleteFolderButton.addEventListener("click", () => {
     const parent = folderData.find((f) => f.children.includes(folder));
     if (parent) parent.children = parent.children.filter((f) => f !== folder);
@@ -623,6 +1024,11 @@ function setupAddFolderButton(button) {
   saveButton.addEventListener("click", () => {
     const name = input.value.trim();
     if (name) {
+      const newFolder = { title: `📁${name}`, type: "folder", children: null };
+
+      // Save to Supabase
+      saveFolder(newFolder);
+
       folderData.push({
         id: generateRandomId(),
         title: `📁${name}`,
@@ -652,9 +1058,6 @@ const observer2 = new MutationObserver((mutations) => {
           : Array.from(node.querySelectorAll("li.relative"));
 
         historyItems.forEach((item) => {
-
-          
-
           if (item.firstChild) {
             // Make chat items draggable
             // console.log(item.firstChild.firstChild.href);
@@ -742,7 +1145,7 @@ const observer2 = new MutationObserver((mutations) => {
 
             // Ensure the parent container has relative positioning
             item.firstChild.style.position = "relative";
-            item.style.transition = '0.5s all ease'
+            item.style.transition = "0.5s all ease";
 
             // Add buttons to container
             buttonContainer.appendChild(addChat);
@@ -755,7 +1158,7 @@ const observer2 = new MutationObserver((mutations) => {
             const chatLink = item.firstChild.firstChild.href;
             const isBookmarked = bookmarks.some((b) => b.link === chatLink);
             bookmarkBtn.innerText = isBookmarked
-              ? "★ Bookmarked"
+              ? "🌟Bookmarked"
               : "☆ Bookmark";
 
             // Bookmark button click handler
@@ -769,14 +1172,20 @@ const observer2 = new MutationObserver((mutations) => {
                 bookmarks = bookmarks.filter((b) => b.link !== chatLink);
                 bookmarkBtn.innerText = "☆ Bookmark";
               } else {
+                const newBookmark = {
+                  title: chatTitle,
+                  link: chatLink,
+                };
                 // Add bookmark
+                saveBookmark(newBookmark);
+
                 bookmarks.push({
                   id: generateRandomId(),
                   title: chatTitle,
                   link: chatLink,
                   timestamp: new Date().toISOString(),
                 });
-                bookmarkBtn.innerText = "★ Bookmarked";
+                bookmarkBtn.innerText = "🌟 Bookmarked";
               }
 
               // Save updated bookmarks
@@ -959,42 +1368,95 @@ const observer2 = new MutationObserver((mutations) => {
                 buttonSection.appendChild(saveButton);
                 buttonSection.appendChild(close);
 
-                // Save button click handler
                 saveButton.addEventListener("click", () => {
                   if (checkBox.length > 0) {
-                    // Find selected folders
                     const selectedFolders = findFoldersById(
                       folderData,
                       checkBox
                     );
 
-                    // Add chat to selected folders
-                    selectedFolders.forEach((folder) => {
-                      folder.children.unshift({
-                        id: generateRandomId(),
-                        title: name,
-                        type: "file",
-                        children: [],
-                        link: localStorage.getItem("link"),
-                      });
-                    });
+                    const newChat = {
+                      title: name,
+                      type: "file",
+                      children: null,
+                      link: localStorage.getItem("link"),
+                    };
 
-                    // Reset checkbox array
-                    checkBox = [];
+                    // 🔹 Save chat to Supabase first
+                    chrome.runtime.sendMessage(
+                      { action: "saveChat", chat: newChat },
+                      (response) => {
+                        if (response.error) {
+                          console.error(
+                            "Error saving chat to Supabase:",
+                            response.error
+                          );
+                        } else {
+                          console.log(
+                            "Chat successfully saved:",
+                            response.data
+                          );
 
-                    // Re-render folders
-                    renderFolders(
-                      folderData,
-                      document.querySelector(".folders")
+                          // 🔹 Now, get the actual chat ID from Supabase
+                          const chatId = response?.data[0]?.id; // Supabase returns an array
+                          console.log(response, "respo");
+
+                          if (!chatId) {
+                            console.error("Chat ID not received from Supabase");
+                            return;
+                          }
+
+                          // 🔹 Now link the chat to the selected folders
+                          selectedFolders.forEach((folder) => {
+                            chrome.runtime.sendMessage(
+                              {
+                                action: "saveChatToFolder",
+                                chatId: chatId, // Use actual chat ID from Supabase
+                                folderId: folder.id,
+                              },
+                              (folderResponse) => {
+                                if (folderResponse.error) {
+                                  console.error(
+                                    "Error saving chat to folder:",
+                                    folderResponse.error
+                                  );
+                                } else {
+                                  console.log(
+                                    "Chat successfully linked to folder:",
+                                    folderResponse.data
+                                  );
+                                }
+                              }
+                            );
+
+                            // Add chat inside the folder in the UI
+                            folder.children.unshift({
+                              id: chatId,
+                              title: newChat.title,
+                              type: "file",
+                              children: [],
+                              link: newChat.link,
+                            });
+                          });
+
+                          // Reset checkboxes
+                          checkBox = [];
+
+                          // Update UI
+                          renderFolders(
+                            folderData,
+                            document.querySelector(".folders")
+                          );
+                          chrome.storage.local.set({ folderData: folderData });
+
+                          // Close modal
+                          modalContainer.style.transform = "scale(0)";
+                          setTimeout(() => {
+                            modalContainer.remove();
+                          }, 500);
+                        }
+                      }
                     );
-                    // Save to storage after adding file
-                    chrome.storage.local.set({ folderData: folderData });
-
-                    // Close modal
-                    modalContainer.style.transform = "scale(0)";
-                    setTimeout(() => {
-                      modalContainer.remove();
-                    }, 500);
                   } else {
                     alert("Please select at least one folder");
                   }
@@ -1028,14 +1490,11 @@ const observer2 = new MutationObserver((mutations) => {
 
             item.addEventListener("mouseover", () => {
               buttonContainer.style.display = "grid";
-              item.style.height = '70px'
-
-
+              item.style.height = "70px";
             });
             item.addEventListener("mouseleave", () => {
               buttonContainer.style.display = "none";
-              item.style.height = 'unset'
-
+              item.style.height = "unset";
             });
           }
         });
@@ -1309,7 +1768,7 @@ function updateBookmarksDisplay() {
     `;
 
     bookmarkElement.innerHTML = `
-      <span style="color: gold;">★</span>
+      <span>🌟</span>
       <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
         ${bookmark.title}
       </span>
@@ -1319,7 +1778,7 @@ function updateBookmarksDisplay() {
         color: #F44336; /* Changed to material design red */
         cursor: pointer;
         padding: 4px;
-        font-size: 16px;
+        font-size: 20px;
       ">×</button>
     `;
 
@@ -1349,5 +1808,5 @@ function removeItemFromFolder(folders, itemId) {
       }
     }
   }
-  return false;
+  return false; 
 }
