@@ -1,27 +1,8 @@
-console.log("Selected folders:", selectedFolders);let folderData = []; // Array to store folder structure
+let folderData = []; // Array to store folder structure
 let checkBox = [];
 let bookmarks = []; // Array to store bookmarked chats
 
-// Load saved bookmarks when initializing
-chrome.storage.local.get(["bookmarks"], function (result) {
-  if (result.bookmarks) {
-    bookmarks = result.bookmarks;
-    console.log("Loaded bookmarks:", bookmarks);
-  }
-});
 
-// Load saved data when initializing
-chrome.storage.local.get(["folderData"], function (result) {
-  if (result.folderData) {
-    folderData = result.folderData;
-    console.log(folderData);
-    // Re-render folders if UI is already initialized
-    const foldersContainer = document.querySelector(".folders");
-    if (foldersContainer) {
-      renderFolders(folderData, foldersContainer);
-    }
-  }
-});
 
 function saveChat(chat) {
   chrome.runtime.sendMessage({ action: "saveChat", chat }, (response) => {
@@ -43,6 +24,43 @@ function saveBookmark(bookmark) {
   );
 }
 
+function deleteFolder(folderId) {
+  chrome.runtime.sendMessage(
+    { action: "deleteFolder", folderId: folderId },
+    (response) => {
+      if (response.error) {
+        console.error("Error deleting folder from Supabase:", response.error);
+      } else {
+        console.log("Folder deleted successfully:", response.data);
+        // ✅ Remove tooltip on delete
+
+        if (activeTooltip) {
+          console.log("akd", activeTooltip);
+          activeTooltip.style.display = "none";
+          document.body.removeChild(activeTooltip);
+          activeTooltip = null;
+        }
+
+        fetchData(); // ✅ Reload folder structure after deletion
+      }
+    }
+  );
+}
+
+function deleteChat(chatId) {
+  chrome.runtime.sendMessage(
+    { action: "deleteChat", chatId: chatId },
+    (response) => {
+      if (response.error) {
+        console.error("Error deleting chat from Supabase:", response.error);
+      } else {
+        console.log("Chat deleted successfully:", response.data);
+        fetchData(); // ✅ Reload chat list after deletion
+      }
+    }
+  );
+}
+
 // 🔹 Function to save a folder to Supabase
 function saveFolder(folder) {
   chrome.runtime.sendMessage({ action: "saveFolder", folder }, (response) => {
@@ -52,7 +70,7 @@ function saveFolder(folder) {
   });
 }
 
-function fetchData(retryCount = 0) {
+function fetchData(retryCount = 0, updateType, updatedItem) {
   chrome.runtime.sendMessage({ action: "getData" }, (response) => {
     if (response.error) {
       console.error("Error fetching data from Supabase:", response.error);
@@ -68,10 +86,10 @@ function fetchData(retryCount = 0) {
       !response.chatFolders
     ) {
       console.warn("Data not fully loaded, retrying...");
-      if (retryCount < 5) {
-        // Retry max 5 times
-        setTimeout(() => fetchData(retryCount + 1), 500);
-      }
+      // if (retryCount < 5) {
+      //   // Retry max 5 times
+      //   setTimeout(() => fetchData(retryCount + 1), 500);
+      // }
       return;
     }
 
@@ -130,15 +148,23 @@ function fetchData(retryCount = 0) {
 
     console.log("Final Folder Structure:", folderData);
 
+    // 🔹 Sort folders by `id` to maintain order
+    folderData.sort((a, b) => a.id - b.id);
+    folderData.forEach((folder) => {
+      folder.children.sort((a, b) => a.id - b.id); // ✅ Maintain order inside folders
+    });
+
     // 🔹 Update UI only when all data is loaded
     if (folderData.length > 0 || bookmarks.length > 0 || chats.length > 0) {
       renderFolders(folderData, document.querySelector(".folders"));
       updateBookmarksDisplay(); // 🔹 Ensure this runs after bookmarks are set
     } else {
       console.warn("Data still empty, retrying...");
-      if (retryCount < 5) {
-        setTimeout(() => fetchData(retryCount + 1), 500);
-      }
+      // if (retryCount < 5) {
+      //   setTimeout(() => fetchData(retryCount + 1), 500);
+      //   console.log('1')
+
+      // }
     }
   });
 }
@@ -146,6 +172,32 @@ function fetchData(retryCount = 0) {
 // 🔹 Call `fetchData` when the extension loads
 fetchData();
 
+// content.js
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action === "realtimeUpdate") {
+    console.log("Realtime payload:", message.payload);
+
+    // Force full refresh for all event types
+    fetchData();
+
+    // Specific handling for inserts
+    if (message.payload.eventType === "INSERT") {
+      const newFolder = message.payload.new;
+      console.log("New folder detected:", newFolder);
+
+      // Add directly to UI while waiting for full refresh
+      const tempElement = createFolderElement({
+        id: newFolder.id,
+        title: newFolder.title,
+        type: "folder",
+        parent_id: newFolder.parent_id,
+        children: [],
+      });
+
+      document.querySelector(".folders").prepend(tempElement);
+    }
+  }
+});
 // const link = document.createElement("link");
 // link.rel = "stylesheet";
 // link.href = chrome.runtime.getURL("styles.css");
@@ -189,7 +241,7 @@ const observer4 = new MutationObserver((mutations, observerInstance) => {
 
       if (originalText.toLowerCase().startsWith(searchText.toLowerCase())) {
         // Highlight the portion of the text that starts with the input
-        const highlightedText = `<span style="color: white; background: #7E57C2; font-weight: bold; letter-spacing: 1.2px">${originalText.slice(
+        const highlightedText = `<span style="color: white; background: #7E57C2; letter-spacing: 1.2px">${originalText.slice(
           0,
           searchText.length
         )}</span>${originalText.slice(searchText.length)}`;
@@ -525,7 +577,6 @@ function createUI(targetElement) {
     border-radius: 8px;
     color: #ffffff;
     font-weight: normal;
-    box-shadow: rgba(221, 219, 219, 0.1) 0px 30px 90px;
     border: 1px solid black;
   `;
 
@@ -561,24 +612,17 @@ function createUI(targetElement) {
 }
 
 function renderFolders(folderArray, container, depth = 0) {
+  // Always clear the container first
+  container.innerHTML = "";
+
   if (!Array.isArray(folderArray) || folderArray.length === 0) {
     console.warn("No folders to render.");
-    return;
+    return; // Now the container is already empty
   }
 
-  container.innerHTML = ""; // Clear existing folders
-
   folderArray.forEach((folder) => {
-    if (!folder) return; // Skip undefined folders
-
+    if (!folder) return;
     const folderElement = createFolderElement(folder, depth);
-    console.log("Rendering Folder:", folder);
-
-    // 🔹 Ensure `folder.children` exists
-    if (!Array.isArray(folder.children)) {
-      folder.children = [];
-    }
-
     container.appendChild(folderElement);
   });
 }
@@ -711,17 +755,39 @@ function createFolderElement(folder, index, depth) {
           // Remove from old location
           removeItemFromFolder(folderData, draggedItem.id);
 
-          // Save to Supabase
+          // 🔹 Step 2: Update chat folder in Supabase
           chrome.runtime.sendMessage(
             {
-              action: "saveChatToFolder",
+              action: "updateChatFolder",
               chatId: draggedItem.id,
               folderId: folder.id,
             },
             (response) => {
-              if (response.error)
-                console.error("Error saving chat to folder:", response.error);
-              else console.log("Chat successfully moved:", response.data);
+              if (response.error) {
+                console.error("Error updating chat folder:", response.error);
+              } else {
+                console.log("Chat folder updated in Supabase:", response.data);
+                fetchData(); // ✅ Refresh UI after update
+              }
+            }
+          );
+
+          // Update parent_id in Supabase
+          chrome.runtime.sendMessage(
+            {
+              action: "updateFolderParent",
+              folderId: draggedItem.id,
+              parentId: folder.id,
+            },
+            (response) => {
+              if (response.error) {
+                console.error("Error updating folder parent:", response.error);
+              } else {
+                console.log(
+                  "Folder parent updated in Supabase:",
+                  response.data
+                );
+              }
             }
           );
 
@@ -757,27 +823,150 @@ function createFolderElement(folder, index, depth) {
         })
       );
       folderTitle.style.opacity = "0.5";
+
+      // Hide any active tooltip immediately on drop
+      if (activeTooltip) {
+        console.log("started", activeTooltip);
+        activeTooltip.style.display = "none";
+        document.body.removeChild(activeTooltip);
+        activeTooltip = null;
+      }
     });
     folderTitle.addEventListener("dragend", () => {
       folderTitle.style.opacity = "1";
+
+      // Hide any active tooltip immediately on drop
+      if (activeTooltip) {
+        activeTooltip.style.display = "none";
+        document.body.removeChild(activeTooltip);
+        activeTooltip = null;
+      }
     });
   } else if (folder.type === "folder") {
     folderTitle.addEventListener("dragover", (e) => {
       e.preventDefault();
       folderTitle.style.backgroundColor = "rgb(100, 100, 100)";
+
+      // Hide any active tooltip immediately on drop
+      if (activeTooltip) {
+        activeTooltip.style.display = "none";
+        document.body.removeChild(activeTooltip);
+        activeTooltip = null;
+      }
     });
     folderTitle.addEventListener("dragleave", () => {
       folderTitle.style.backgroundColor = backgroundColor;
+
+      // Hide any active tooltip immediately on drop
+      if (activeTooltip) {
+        activeTooltip.style.display = "none";
+        document.body.removeChild(activeTooltip);
+        activeTooltip = null;
+      }
     });
     folderTitle.addEventListener("drop", (e) => {
       e.preventDefault();
       folderTitle.style.backgroundColor = backgroundColor;
+
+      // Hide any active tooltip immediately on drop
+      if (activeTooltip) {
+        activeTooltip.style.display = "none";
+        document.body.removeChild(activeTooltip);
+        activeTooltip = null;
+      }
 
       try {
         const draggedItem = JSON.parse(e.dataTransfer.getData("text/plain"));
         if (draggedItem.type === "file") {
           // Remove from old location
           removeItemFromFolder(folderData, draggedItem.id);
+
+          console.log("me", draggedItem, folder?.id);
+
+          const newChat = {
+            title: draggedItem?.title,
+            type: "file",
+            children: null,
+            link: draggedItem?.link,
+          };
+
+          const exists = folderData.some((f) => f.id === draggedItem?.id);
+          console.log("Exists in folderData?", exists);
+
+          if (exists) {
+            console.log("dragFold");
+            // 🔹 Step 2: save chat To folder in Supabase
+            chrome.runtime.sendMessage(
+              { action: "saveChat", chat: newChat },
+
+              (response) => {
+                if (response.error) {
+                  console.error(
+                    "Error saving chat to Supabase:",
+                    response.error
+                  );
+                } else {
+                  console.log("Chat successfully saved:", response.data);
+
+                  // 🔹 Now, get the actual chat ID from Supabase
+                  const chatId = response?.data[0]?.id; // Supabase returns an array
+                  console.log(response, "respo");
+
+                  if (!chatId) {
+                    console.error("Chat ID not received from Supabase");
+                    return;
+                  }
+
+                  chrome.runtime.sendMessage(
+                    {
+                      action: "saveChatToFolder",
+                      chatId: chatId, // Use actual chat ID from Supabase
+                      folderId: folder?.id,
+                    },
+                    (folderResponse) => {
+                      if (folderResponse.error) {
+                        console.error(
+                          "Error saving chat to folder:",
+                          folderResponse.error
+                        );
+                      } else {
+                        console.log(
+                          "Chat successfully linked to folder:",
+                          folderResponse.data
+                        );
+                      }
+                    }
+                  );
+                }
+              }
+            );
+          }
+
+          if (folderData.find((f) => f.id === draggedItem?.id)) {
+            console.log("aded");
+            chrome.runtime.sendMessage(
+              {
+                action: "updateChatFolder",
+                chatId: draggedItem?.id,
+                folderId: folder?.id,
+              },
+              (response) => {
+                if (response.error) {
+                  console.error("Error updating chat folder:", response.error);
+                } else {
+                  console.log(
+                    "Chat folder updated in Supabase:",
+                    response.data
+                  );
+
+                  fetchData(); // Refresh UI after update
+                }
+              }
+            );
+          }
+
+          console.log("dragged", folderData);
+
           // Add to new location
           folder.children.unshift({
             id: draggedItem.id,
@@ -785,6 +974,7 @@ function createFolderElement(folder, index, depth) {
             type: "file",
             children: [],
           });
+
           // Save and re-render
           chrome.storage.local.set({ folderData: folderData });
           renderFolders(folderData, document.querySelector(".folders"));
@@ -797,6 +987,7 @@ function createFolderElement(folder, index, depth) {
   folderTitle.style.width = "100%";
   folderTitle.style.fontWeight = "600";
 
+  let activeTooltip = null; // Store the active tooltip
   // Add tooltip for file type
   if (folder) {
     const tooltip = document.createElement("div");
@@ -824,11 +1015,25 @@ function createFolderElement(folder, index, depth) {
     document.body.appendChild(tooltip);
     activeTooltip = tooltip;
 
+    // 🔹 Remove tooltip when the user clicks anywhere outside folders/chats
+    document.addEventListener("mousemove", (e) => {
+      if (!e.target.closest(".folders")) {
+        tooltip.style.display = "none";
+      }
+    });
+
+    // 🔹 Remove tooltips when clicking anywhere on the page
+    document.addEventListener("click", () => {
+      tooltip.style.display = "none";
+    });
+
     let isDragging = false;
 
     folderTitle.addEventListener("dragstart", () => {
       isDragging = true;
       tooltip.style.display = "none";
+
+      console.log("dragkd", tooltip, folder);
     });
 
     folderTitle.addEventListener("dragend", () => {
@@ -977,6 +1182,24 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     const newName = prompt("Enter new name:", folder.title.replace("📁", ""));
     if (newName) {
       folder.title = folder.type === "folder" ? `📁${newName}` : newName;
+
+      // Update Supabase
+      chrome.runtime.sendMessage(
+        {
+          action: "renameFoldersAndChats",
+          itemId: folder.id,
+          newTitle: newName,
+          itemType: folder.type,
+        },
+        (response) => {
+          if (response.error) {
+            console.error("Error renaming item:", response.error);
+          } else {
+            console.log("Item renamed successfully:", response.data);
+          }
+        }
+      );
+
       renderFolders(folderData, document.querySelector(".folders"));
       // Save updated folder data to storage
       chrome.storage.local.set({ folderData: folderData });
@@ -988,6 +1211,23 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     const parent = folderData.find((f) => f.children.includes(folder));
     if (parent) parent.children = parent.children.filter((f) => f !== folder);
     else folderData = folderData.filter((f) => f !== folder);
+
+    if (folder.type === "folder") {
+      // ✅ Handle folder deletion
+      if (
+        confirm(
+          `Are you sure you want to delete "${folder.title}"? This will delete all subfolders and chats inside it.`
+        )
+      ) {
+        deleteFolder(folder.id);
+      }
+    } else {
+      // ✅ Handle folder deletion
+      if (confirm(`Are you sure you want to delete "${folder.title}"?`)) {
+        deleteChat(folder.id);
+      }
+    }
+
     renderFolders(folderData, document.querySelector(".folders"));
     // Save to storage after deleting folder
     chrome.storage.local.set({ folderData: folderData });
@@ -1093,6 +1333,11 @@ const observer2 = new MutationObserver((mutations) => {
 
             item.firstChild.addEventListener("dragend", () => {
               item.firstChild.style.opacity = "1";
+
+              item.firstChild.addEventListener("drop", () => {
+                console.log("daks");
+              });
+
               // Ensure tooltip is removed after drag ends
               if (activeTooltip) {
                 activeTooltip.style.opacity = "0";
@@ -1808,5 +2053,5 @@ function removeItemFromFolder(folders, itemId) {
       }
     }
   }
-  return false; 
+  return false;
 }

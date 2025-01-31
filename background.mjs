@@ -5,19 +5,29 @@ const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlpb2tjcHJmeHR0ZGxzendocG1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTQ4MTgxMTQsImV4cCI6MjAzMDM5NDExNH0.suVgkMsAdXHDDPmhrvXjCop-pbY70b1LzIt_6dS8ddI";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-// // 🔹 Function to test database connection
-// async function testSupabaseConnection() {
-//   const { data, error } = await supabase
-//     .from("Food") // Replace with an actual table name
-//     .select("*")
-//     .limit(1); // Fetch one record to check if it works
 
-//   if (error) {
-//     console.error("Supabase error:", error);
-//   } else {
-//     console.log("Supabase data:", data);
-//   }
-// }
+const setupRealtime = () => {
+  const tables = ['folders', 'chats', 'chats_folder', 'bookmarks'];
+  
+  tables.forEach(table => {
+    supabase
+      .channel(table)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: table
+      }, (payload) => {
+        console.log(`Realtime ${table} update:`, payload);
+        chrome.runtime.sendMessage({
+          action: "realtimeUpdate",
+          payload: payload
+        });
+      })
+      .subscribe();
+  });
+};
+
+setupRealtime();
 
 // Function to save bookmarks in Supabase
 async function saveBookmarkToSupabase(bookmark) {
@@ -139,6 +149,110 @@ async function getChatsFromSupabase() {
   }
 }
 
+async function updateFolderParent(folderId, parentId) {
+  const { data, error } = await supabase
+    .from("folders")
+    .update({ parent_id: parentId })
+    .eq("id", folderId);
+
+  if (error) {
+    console.error("Supabase Error (Update Folder Parent):", error);
+    return { error };
+  } else {
+    console.log("Updated folder parent in Supabase:", data);
+    return { data };
+  }
+}
+
+async function updateChatFolder(chatId, newFolderId) {
+  // 🔹 Delete old folder association
+  await supabase.from("chats_folder").delete().eq("chat_id", chatId);
+
+  // 🔹 Insert new folder association
+  const { data, error } = await supabase
+    .from("chats_folder")
+    .insert([{ chat_id: chatId, folder_id: newFolderId }]);
+
+  if (error) {
+    console.error("Supabase Error (Update Chat Folder):", error);
+    return { error };
+  } else {
+    console.log("Updated chat folder in Supabase:", data);
+    return { data };
+  }
+}
+
+async function renameItem(itemId, newTitle, itemType) {
+  const table = itemType === "folder" ? "folders" : "chats";
+
+  const { data, error } = await supabase
+    .from(table)
+    .update({ title: itemType === "folder" ? `📁${newTitle}` : `${newTitle}` })
+    .eq("id", itemId);
+
+  if (error) {
+    console.error("Supabase Error (Rename Item):", error);
+    return { error };
+  } else {
+    console.log("Renamed item in Supabase:", data);
+    return { data };
+  }
+}
+
+async function deleteFolderFromSupabase(folderId) {
+  console.log(`Deleting folder ${folderId} and its contents...`);
+
+  // 🔹 Delete all chats inside this folder
+  await supabase.from("chats_folder").delete().eq("folder_id", folderId);
+
+  // 🔹 Delete all subfolders
+  const { data: subfolders, error: subfolderError } = await supabase
+    .from("folders")
+    .select("id")
+    .eq("parent_id", folderId);
+
+  if (subfolderError) {
+    console.error("Supabase Error (Fetch Subfolders):", subfolderError);
+    return { error: subfolderError };
+  }
+
+  for (const subfolder of subfolders) {
+    await deleteFolderFromSupabase(subfolder.id); // 🔹 Recursively delete subfolders
+  }
+
+  // 🔹 Finally, delete the main folder
+  const { error: folderError } = await supabase
+    .from("folders")
+    .delete()
+    .eq("id", folderId);
+
+  if (folderError) {
+    console.error("Supabase Error (Delete Folder):", folderError);
+    return { error: folderError };
+  }
+
+  console.log(`Folder ${folderId} and its contents deleted.`);
+  return { success: true };
+}
+
+async function deleteChatFromSupabase(chatId) {
+  console.log(`Deleting chat ${chatId}...`);
+
+  // 🔹 Step 1: Delete the chat from `chats_folder` first
+  await supabase.from("chats_folder").delete().eq("chat_id", chatId);
+
+  // 🔹 Step 2: Then delete the chat from `chats`
+  const { error } = await supabase.from("chats").delete().eq("id", chatId);
+
+  if (error) {
+    console.error("Supabase Error (Delete Chat):", error);
+    return { error };
+  }
+
+  console.log(`Chat ${chatId} deleted.`);
+  return { success: true };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "saveBookmark") {
     saveBookmarkToSupabase(message.bookmark)
@@ -154,8 +268,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "realtimeUpdate") {
+    // Handle real-time updates here
+    console.log("Real-time update received:", message.payload);
+    // You can trigger a re-fetch of data or update the UI accordingly
+  }
+
+  if (message.action === "deleteFolder") {
+    deleteFolderFromSupabase(message.folderId)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.action === "deleteChat") {
+    deleteChatFromSupabase(message.chatId)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.action === "renameFoldersAndChats") {
+    renameItem(message.itemId, message.newTitle, message.itemType)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.action === "updateFolderParent") {
+    updateFolderParent(message.folderId, message.parentId)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
   if (message.action === "saveChat") {
     saveChatToSupabase(message.chat)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.action === "updateChatFolder") {
+    updateChatFolder(message.chatId, message.folderId)
       .then((response) => sendResponse(response))
       .catch((err) => sendResponse({ error: err.message }));
     return true;
