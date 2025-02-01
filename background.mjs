@@ -253,6 +253,23 @@ async function deleteChatFromSupabase(chatId) {
   return { success: true };
 }
 
+async function deleteBookmarkFromSupabase(bookmarkId) {
+  console.log(`Deleting bookmark ${bookmarkId}...`);
+
+  const { error } = await supabase
+    .from("bookmarks")
+    .delete()
+    .eq("id", bookmarkId);
+
+  if (error) {
+    console.error("Supabase Error (Delete Bookmark):", error);
+    return { error };
+  }
+
+  console.log(`Bookmark ${bookmarkId} deleted.`);
+  return { success: true };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "saveBookmark") {
     saveBookmarkToSupabase(message.bookmark)
@@ -276,6 +293,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "deleteFolder") {
     deleteFolderFromSupabase(message.folderId)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.action === "deleteBookmarks") {
+    deleteBookmarkFromSupabase(message.bookmarkId)
       .then((response) => sendResponse(response))
       .catch((err) => sendResponse({ error: err.message }));
     return true;

@@ -2,8 +2,6 @@ let folderData = []; // Array to store folder structure
 let checkBox = [];
 let bookmarks = []; // Array to store bookmarked chats
 
-
-
 function saveChat(chat) {
   chrome.runtime.sendMessage({ action: "saveChat", chat }, (response) => {
     if (response.error)
@@ -50,6 +48,20 @@ function deleteFolder(folderId) {
 function deleteChat(chatId) {
   chrome.runtime.sendMessage(
     { action: "deleteChat", chatId: chatId },
+    (response) => {
+      if (response.error) {
+        console.error("Error deleting chat from Supabase:", response.error);
+      } else {
+        console.log("Chat deleted successfully:", response.data);
+        fetchData(); // ✅ Reload chat list after deletion
+      }
+    }
+  );
+}
+
+function deleteBookmark(bookmarkId) {
+  chrome.runtime.sendMessage(
+    { action: "deleteBookmarks", bookmarkId: bookmarkId },
     (response) => {
       if (response.error) {
         console.error("Error deleting chat from Supabase:", response.error);
@@ -893,7 +905,7 @@ function createFolderElement(folder, index, depth) {
           const exists = folderData.some((f) => f.id === draggedItem?.id);
           console.log("Exists in folderData?", exists);
 
-          if (exists) {
+          if (!exists) {
             console.log("dragFold");
             // 🔹 Step 2: save chat To folder in Supabase
             chrome.runtime.sendMessage(
@@ -2031,6 +2043,7 @@ function updateBookmarksDisplay() {
     removeBtn.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
+      deleteBookmark(bookmark?.id);
       bookmarks = bookmarks.filter((b) => b.id !== bookmark.id);
       chrome.storage.local.set({ bookmarks: bookmarks });
       updateBookmarksDisplay();
