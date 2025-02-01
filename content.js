@@ -280,16 +280,11 @@ const observer4 = new MutationObserver((mutations, observerInstance) => {
   searchSection.appendChild(searchInput);
 
   // Locate the target element
-  const targetElement = document.querySelector(
-    "span[data-testid='blocking-initial-modals-done']"
-  );
+  const targetElement = document.querySelector("[aria-label='Chat history']");
 
-  if (
-    targetElement &&
-    targetElement.nextElementSibling &&
-    targetElement.nextElementSibling.firstChild
-  ) {
-    const widthContainer = targetElement.nextElementSibling.firstChild;
+  if (targetElement) {
+    const widthContainer =
+      targetElement.parentElement.parentElement.parentElement.parentElement;
 
     // Ensure the container has position: relative for absolute positioning
     widthContainer.style.position = "relative";
@@ -315,7 +310,7 @@ const observer4 = new MutationObserver((mutations, observerInstance) => {
     slider.innerText = "⋮⋮";
     slider.style.color = "rgb(128, 102, 204)";
     slider.style.position = "absolute";
-    slider.style.top = "10%";
+    slider.style.top = "50%";
     slider.style.right = "0";
     slider.style.transform = "translateY(-50%)";
     slider.style.zIndex = "10000000";
@@ -327,6 +322,57 @@ const observer4 = new MutationObserver((mutations, observerInstance) => {
     slider.style.borderRadius = "50%";
     slider.style.display = "grid";
     slider.style.placeItems = "center";
+
+    // Add tooltip for slider
+    const tooltip = document.createElement("div");
+    tooltip.style.cssText = `
+  position: fixed;
+  background-color: #1a1a1a;
+  color: white;
+  padding: 10px 15px;
+  border-radius: 8px;
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 10000;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+  border: 1px solid #333;
+  display: none;
+  max-width: 300px;
+  word-wrap: break-word;
+  backdrop-filter: blur(5px);
+  transition: opacity 0.2s ease;
+  opacity: 0;
+`;
+    tooltip.innerHTML = `
+  <div style="font-weight: 600; margin-bottom: 4px;">Slide Right</div>
+`;
+    document.body.appendChild(tooltip);
+
+    slider.addEventListener("mouseover", () => {
+      tooltip.style.display = "block";
+      tooltip.style.opacity = "1";
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      let left = slider.offsetLeft + slider.offsetWidth + 15;
+      let top =
+        slider.offsetTop + slider.offsetHeight / 2 - tooltipRect.height / 2;
+      if (left + tooltipRect.width > viewportWidth) {
+        left = slider.offsetLeft - tooltipRect.width - 15;
+      }
+      if (top + tooltipRect.height > viewportHeight) {
+        top = slider.offsetTop - tooltipRect.height - 15;
+      }
+      tooltip.style.left = left + "px";
+      tooltip.style.top = top + "px";
+    });
+
+    slider.addEventListener("mouseleave", () => {
+      tooltip.style.opacity = "0";
+      setTimeout(() => {
+        tooltip.style.display = "none";
+      }, 200);
+    });
 
     // Append the slider if it hasn't already been appended
     // if (!widthContainer.querySelector("div")) {
@@ -342,14 +388,14 @@ const observer4 = new MutationObserver((mutations, observerInstance) => {
       isDragging = true;
       startX = e.clientX;
       startWidth = widthContainer.offsetWidth;
-
+      tooltip.style.display = "none";
       // Prevent text selection during dragging
       document.body.style.userSelect = "none";
     });
 
     document.addEventListener("mousemove", (e) => {
       if (!isDragging) return;
-
+      tooltip.style.display = "none";
       const deltaX = e.clientX - startX;
       const newWidth = Math.max(50, startWidth + deltaX); // Minimum width of 50px
       widthContainer.style.width = `${newWidth}px`;
@@ -363,7 +409,7 @@ const observer4 = new MutationObserver((mutations, observerInstance) => {
     document.addEventListener("mouseup", () => {
       if (isDragging) {
         isDragging = false;
-
+        tooltip.style.display = "none";
         // Restore text selection
         document.body.style.userSelect = "";
       }
@@ -922,7 +968,6 @@ function createFolderElement(folder, index, depth) {
 
                   // 🔹 Now, get the actual chat ID from Supabase
                   const chatId = response?.data[0]?.id; // Supabase returns an array
-                  console.log(response, "respo");
 
                   if (!chatId) {
                     console.error("Chat ID not received from Supabase");
