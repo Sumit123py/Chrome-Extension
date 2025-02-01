@@ -224,7 +224,7 @@ const observer4 = new MutationObserver((mutations, observerInstance) => {
 `;
   const searchInput = document.createElement("input");
   searchInput.type = "text";
-  searchInput.placeholder = "Search Chats...";
+  searchInput.placeholder = "Search History...";
   searchInput.style.cssText = `
   width: 100%;
   padding: 8px;
