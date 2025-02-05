@@ -967,9 +967,20 @@ function generateRandomId() {
 
 // Function to calculate the brightness of a color (to check if it's dark or light)
 function isColorDark(rgb) {
-  const [r, g, b] = rgb.match(/\d+/g).map(Number);
-  const brightness = 0.2126 * r + 0.7152 * g + 0.0722 * b; // Using the luminance formula
-  return brightness < 128; // If the brightness is less than 128, it's considered dark
+  if (!rgb) {
+    console.error("Invalid RGB value:", rgb);
+    return false; // Default to false if value is null
+  }
+
+  const match = rgb.match(/\d+/g);
+  if (!match) {
+    console.error("Invalid RGB format:", rgb);
+    return false;
+  }
+
+  const [r, g, b] = match.map(Number);
+  const brightness = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return brightness < 128;
 }
 
 const observer = new MutationObserver((mutations, observerInstance) => {
