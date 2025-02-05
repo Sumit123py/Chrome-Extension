@@ -34,14 +34,32 @@ function saveBookmark(bookmark) {
 }
 
 function renameWithAI(title, id, type) {
-  // Show loader in the designated container (assume there's an element with id 'aiLoaderContainer')
+  const element = document.querySelector(`[data-id="${id}"]`);
+  if (!element) return;
+
+  // Create and insert the loader
   const loader = document.createElement("div");
-  loader.innerText = "Loading..."; // or insert your spinner HTML here
-  loader.classList.add("loader"); // add any styling via CSS if needed
-  const loaderContainer = document.getElementById("aiLoaderContainer");
-  if (loaderContainer) {
-    loaderContainer.appendChild(loader);
-  }
+  loader.className = "ai-rename-loader";
+  loader.style.cssText = `
+    width: 20px;
+    height: 20px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    margin-left: 10px;
+  `;
+  element.appendChild(loader);
+
+  // Add the spin animation to the document
+  const style = document.createElement("style");
+  style.textContent = `
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `;
 
   // Create the prompt for DeepSeek AI using the current title
   const prompt = `Suggest a short(upto 5 words) name but good so user can easily understand it (give only name, not any symbol or quotes), clear name for: ${title}`;
@@ -51,7 +69,6 @@ function renameWithAI(title, id, type) {
     if (loader && loader.parentNode) {
       loader.parentNode.removeChild(loader);
     }
-
     // Clean the AI response: if the response includes text wrapped in **, extract that text.
     let newName = response.trim();
     const match = newName.match(/\*\*(.*?)\*\*/);
