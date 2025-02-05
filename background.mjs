@@ -1,39 +1,163 @@
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = "https://iiokcprfxttdlszwhpma.supabase.co";
+const SUPABASE_URL = "https://hpkbboqsakdygxojgcsb.supabase.co";
 const SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlpb2tjcHJmeHR0ZGxzendocG1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTQ4MTgxMTQsImV4cCI6MjAzMDM5NDExNH0.suVgkMsAdXHDDPmhrvXjCop-pbY70b1LzIt_6dS8ddI";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhwa2Jib3FzYWtkeWd4b2pnY3NiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0NjQ2NTUsImV4cCI6MjA1NDA0MDY1NX0.3O276DS3wL8Wc9Gh8Vvh7YX_n0KN_-Ib9gZMQsmMp5c";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const setupRealtime = () => {
-  const tables = ['folders', 'chats', 'chats_folder', 'bookmarks'];
-  
-  tables.forEach(table => {
+async function queryDeepSeek(prompt) {
+  const API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJwYXNwb2xhc3VtaXQyMDA0QGdtYWlsLmNvbSIsImlhdCI6MTczODU4MTk2NX0.pwfNy5jb35jmwsMicFOF-ZBxGqfeeTEAuTYrEl-UdNU"; // 🔹 Replace with your actual API Key
+  const response = await fetch("https://api.hyperbolic.xyz/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "deepseek-ai/DeepSeek-V3", // Adjust model name if needed
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  const data = await response.json();
+  return data?.choices?.[0]?.message?.content || "Error fetching response";
+}
+
+// 🔹 Sign Up Function (Username & Password)
+async function signUpWithUsername(username, password) {
+  // Check if username already exists
+  const { data: existingUser } = await supabase
+    .from("users")
+    .select("id")
+    .eq("username", username)
+    .single();
+
+  if (existingUser) {
+    return { error: "Username already exists." };
+  }
+
+  // Insert new user
+  const { data, error } = await supabase
+    .from("users")
+    .insert([{ username, password }])
+    .select("id, username");
+
+  if (error) {
+    console.error("Signup error:", error);
+    return { error };
+  }
+
+  console.log("User signed up successfully:", data);
+  chrome.storage.local.set({ user: data[0] });
+
+  return { data: data[0] };
+}
+
+// 🔹 Sign In Function (Username & Password)
+async function signInWithUsername(username, password) {
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, username")
+    .eq("username", username)
+    .eq("password", password)
+    .single();
+
+  if (error || !data) {
+    console.error("Login error:", error);
+    return { error: "Invalid username or password." };
+  }
+
+  console.log("User logged in successfully:", data);
+  chrome.storage.local.set({ user: data });
+
+  return { data };
+}
+
+// 🔹 Log Out Function
+async function signOut() {
+  chrome.storage.local.remove("user");
+  console.log("User logged out");
+}
+
+// 🔹 Check If User is Logged In on Extension Startup
+function checkUserSession() {
+  chrome.storage.local.get(["user"], (result) => {
+    if (result.user) {
+      console.log("User session restored:", result.user);
+    } else {
+      console.log("No active session found.");
+    }
+  });
+}
+
+// Run this on extension startup
+checkUserSession();
+
+// Send real-time update only if a content script is active
+function sendMessageToContentScript(message) {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs.length > 0) {
+      chrome.tabs.sendMessage(tabs[0].id, message, (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn("No content script found. Ignoring message.");
+        } else {
+          console.log("Message sent to content script:", message);
+        }
+      });
+    }
+  });
+}
+
+// 🔹 Listen for real-time changes in folders, chats, bookmarks, and chats_folder
+function setupRealtimeListeners() {
+  const tables = ["folders", "chats", "bookmarks", "chats_folder"];
+
+  tables.forEach((table) => {
     supabase
       .channel(table)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: table
-      }, (payload) => {
-        console.log(`Realtime ${table} update:`, payload);
-        chrome.runtime.sendMessage({
-          action: "realtimeUpdate",
-          payload: payload
-        });
-      })
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: table },
+        (payload) => {
+          console.log(`🔄 Real-time update received for ${table}:`, payload);
+
+          let updateType = payload.eventType || payload.event;
+          let updatedItem = payload.new || payload.old;
+
+          // Send real-time update to content.js
+          sendMessageToContentScript({
+            action: "realtimeUpdate",
+            table: table,
+            updateType: updateType,
+            updatedItem: updatedItem,
+          });
+        }
+      )
       .subscribe();
   });
-};
+}
 
-setupRealtime();
+// 🔹 Call function to start listening
+setupRealtimeListeners();
 
 // Function to save bookmarks in Supabase
 async function saveBookmarkToSupabase(bookmark) {
+  if (!bookmark.user_id) {
+    console.error("Error: User ID is missing when saving the bookmark!");
+    return { error: "User ID is required" };
+  }
+
   const { data, error } = await supabase
     .from("bookmarks") // Supabase table name
-    .insert([{ title: bookmark?.title, link: bookmark?.link }]);
+    .insert([
+      {
+        title: bookmark?.title,
+        link: bookmark?.link,
+        user_id: bookmark.user_id,
+      },
+    ])
+    .select("*");
 
   if (error) {
     console.error("Supabase Error:", error);
@@ -45,8 +169,11 @@ async function saveBookmarkToSupabase(bookmark) {
 }
 
 // 🔹 Function to fetch bookmarks from Supabase
-async function getBookmarksFromSupabase() {
-  const { data, error } = await supabase.from("bookmarks").select("*");
+async function getBookmarksFromSupabase(user_id) {
+  const { data, error } = await supabase
+    .from("bookmarks")
+    .select("*")
+    .eq("user_id", user_id);
 
   if (error) {
     console.error("Supabase Error (Get Bookmarks):", error);
@@ -59,10 +186,16 @@ async function getBookmarksFromSupabase() {
 
 // 🔹 Function to save a chat to Supabase
 async function saveChatToSupabase(chat) {
+  if (!chat.user_id) {
+    console.error("Error: User ID is missing when saving the chat!");
+    return { error: "User ID is required" };
+  }
+
   const { data, error } = await supabase
     .from("chats")
-    .insert([{ title: chat?.title, link: chat?.link }])
+    .insert([{ title: chat?.title, link: chat?.link, user_id: chat?.user_id }])
     .select("*"); // 🔹 Ensure Supabase returns the inserted row
+
   if (error) {
     console.error("Supabase Error (Insert Chat):", error);
     return { error };
@@ -72,17 +205,22 @@ async function saveChatToSupabase(chat) {
   }
 }
 
-// 🔹 Function to insert a folder into Supabase
 async function saveFolderToSupabase(folder) {
+  if (!folder.user_id) {
+    console.error("Error: User ID is missing when saving the folder!");
+    return { error: "User ID is required" };
+  }
+
   const { data, error } = await supabase
     .from("folders")
     .insert([
       {
         title: folder?.title,
         parent_id: folder?.parent_id,
+        user_id: folder?.user_id, // ✅ Ensure user_id is correctly inserted
       },
     ])
-    .select("id, title, parent_id"); // ✅ Fetch the inserted folder's data
+    .select("id, title, parent_id, user_id"); // ✅ Fetch user_id as well
 
   if (error) {
     console.error("Supabase Error (Insert Folder):", error);
@@ -93,24 +231,17 @@ async function saveFolderToSupabase(folder) {
   }
 }
 
-// 🔹 Function to fetch folders from Supabase
-async function getFoldersFromSupabase() {
-  const { data, error } = await supabase.from("folders").select("*");
-
-  if (error) {
-    console.error("Supabase Error (Get Folders):", error);
-    return { error };
-  } else {
-    console.log("Fetched folders:", data);
-    return { data };
-  }
-}
-
 // 🔹 Function to save chat inside a folder
-async function saveChatToFolder(chatId, folderId) {
+async function saveChatToFolder(chatId, folderId, user_id) {
+  if (!user_id) {
+    console.error("Error: User ID is missing when saving the chat folder!");
+    return { error: "User ID is required" };
+  }
+
   const { data, error } = await supabase
     .from("chats_folder")
-    .insert([{ chat_id: chatId, folder_id: folderId }]);
+    .insert([{ chat_id: chatId, folder_id: folderId, user_id: user_id }])
+    .select("*");
 
   if (error) {
     console.error("Supabase Error (Save Chat to Folder):", error);
@@ -121,11 +252,28 @@ async function saveChatToFolder(chatId, folderId) {
   }
 }
 
+// 🔹 Function to fetch folders from Supabase
+async function getFoldersFromSupabase(user_id) {
+  const { data, error } = await supabase
+    .from("folders")
+    .select("*")
+    .eq("user_id", user_id);
+
+  if (error) {
+    console.error("Supabase Error (Get Folders):", error);
+    return { error };
+  } else {
+    console.log("Fetched folders:", data);
+    return { data };
+  }
+}
+
 // 🔹 Function to fetch chats inside folders
-async function getChatsInFolders() {
+async function getChatsInFolders(user_id) {
   const { data, error } = await supabase
     .from("chats_folder")
-    .select("chat_id, folder_id, chats(title, link)");
+    .select("chat_id, folder_id, chats(title, link)")
+    .eq("user_id", user_id);
 
   if (error) {
     console.error("Supabase Error (Get Chats in Folders):", error);
@@ -137,8 +285,11 @@ async function getChatsInFolders() {
 }
 
 // 🔹 Function to fetch chats from Supabase
-async function getChatsFromSupabase() {
-  const { data, error } = await supabase.from("chats").select("*");
+async function getChatsFromSupabase(user_id) {
+  const { data, error } = await supabase
+    .from("chats")
+    .select("*")
+    .eq("user_id", user_id);
 
   if (error) {
     console.error("Supabase Error (Get Chats):", error);
@@ -149,11 +300,12 @@ async function getChatsFromSupabase() {
   }
 }
 
-async function updateFolderParent(folderId, parentId) {
+async function updateFolderParent(folderId, parentId, user_id) {
   const { data, error } = await supabase
     .from("folders")
     .update({ parent_id: parentId })
-    .eq("id", folderId);
+    .eq("id", folderId)
+    .eq("user_id", user_id);
 
   if (error) {
     console.error("Supabase Error (Update Folder Parent):", error);
@@ -164,14 +316,24 @@ async function updateFolderParent(folderId, parentId) {
   }
 }
 
-async function updateChatFolder(chatId, newFolderId) {
+async function updateChatFolder(chatId, newFolderId, user_id) {
+  if (!user_id) {
+    console.error("Error: User ID is missing when saving the chat folder!");
+    return { error: "User ID is required" };
+  }
+
   // 🔹 Delete old folder association
-  await supabase.from("chats_folder").delete().eq("chat_id", chatId);
+  await supabase
+    .from("chats_folder")
+    .delete()
+    .eq("chat_id", chatId)
+    .eq("user_id", user_id);
 
   // 🔹 Insert new folder association
   const { data, error } = await supabase
     .from("chats_folder")
-    .insert([{ chat_id: chatId, folder_id: newFolderId }]);
+    .insert([{ chat_id: chatId, folder_id: newFolderId, user_id: user_id }])
+    .select("*");
 
   if (error) {
     console.error("Supabase Error (Update Chat Folder):", error);
@@ -182,13 +344,14 @@ async function updateChatFolder(chatId, newFolderId) {
   }
 }
 
-async function renameItem(itemId, newTitle, itemType) {
+async function renameItem(itemId, newTitle, itemType, user_id) {
   const table = itemType === "folder" ? "folders" : "chats";
 
   const { data, error } = await supabase
     .from(table)
     .update({ title: itemType === "folder" ? `📁${newTitle}` : `${newTitle}` })
-    .eq("id", itemId);
+    .eq("id", itemId)
+    .eq("user_id", user_id);
 
   if (error) {
     console.error("Supabase Error (Rename Item):", error);
@@ -199,17 +362,22 @@ async function renameItem(itemId, newTitle, itemType) {
   }
 }
 
-async function deleteFolderFromSupabase(folderId) {
+async function deleteFolderFromSupabase(folderId, user_id) {
   console.log(`Deleting folder ${folderId} and its contents...`);
 
   // 🔹 Delete all chats inside this folder
-  await supabase.from("chats_folder").delete().eq("folder_id", folderId);
+  await supabase
+    .from("chats_folder")
+    .delete()
+    .eq("folder_id", folderId)
+    .eq("user_id", user_id);
 
   // 🔹 Delete all subfolders
   const { data: subfolders, error: subfolderError } = await supabase
     .from("folders")
     .select("id")
-    .eq("parent_id", folderId);
+    .eq("parent_id", folderId)
+    .eq("user_id", user_id);
 
   if (subfolderError) {
     console.error("Supabase Error (Fetch Subfolders):", subfolderError);
@@ -224,7 +392,8 @@ async function deleteFolderFromSupabase(folderId) {
   const { error: folderError } = await supabase
     .from("folders")
     .delete()
-    .eq("id", folderId);
+    .eq("id", folderId)
+    .eq("user_id", user_id);
 
   if (folderError) {
     console.error("Supabase Error (Delete Folder):", folderError);
@@ -235,14 +404,22 @@ async function deleteFolderFromSupabase(folderId) {
   return { success: true };
 }
 
-async function deleteChatFromSupabase(chatId) {
+async function deleteChatFromSupabase(chatId, user_id) {
   console.log(`Deleting chat ${chatId}...`);
 
   // 🔹 Step 1: Delete the chat from `chats_folder` first
-  await supabase.from("chats_folder").delete().eq("chat_id", chatId);
+  await supabase
+    .from("chats_folder")
+    .delete()
+    .eq("chat_id", chatId)
+    .eq("user_id", user_id);
 
   // 🔹 Step 2: Then delete the chat from `chats`
-  const { error } = await supabase.from("chats").delete().eq("id", chatId);
+  const { error } = await supabase
+    .from("chats")
+    .delete()
+    .eq("id", chatId)
+    .eq("user_id", user_id);
 
   if (error) {
     console.error("Supabase Error (Delete Chat):", error);
@@ -253,13 +430,14 @@ async function deleteChatFromSupabase(chatId) {
   return { success: true };
 }
 
-async function deleteBookmarkFromSupabase(bookmarkId) {
+async function deleteBookmarkFromSupabase(bookmarkId, user_id) {
   console.log(`Deleting bookmark ${bookmarkId}...`);
 
   const { error } = await supabase
     .from("bookmarks")
     .delete()
-    .eq("id", bookmarkId);
+    .eq("id", bookmarkId)
+    .eq("user_id", user_id);
 
   if (error) {
     console.error("Supabase Error (Delete Bookmark):", error);
@@ -279,7 +457,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "saveChatToFolder") {
-    saveChatToFolder(message.chatId, message.folderId)
+    saveChatToFolder(message.chatId, message.folderId, message.user_id)
       .then((response) => sendResponse(response))
       .catch((err) => sendResponse({ error: err.message }));
     return true;
@@ -292,35 +470,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "deleteFolder") {
-    deleteFolderFromSupabase(message.folderId)
+    deleteFolderFromSupabase(message.folderId, message.user_id)
       .then((response) => sendResponse(response))
       .catch((err) => sendResponse({ error: err.message }));
     return true;
   }
 
   if (message.action === "deleteBookmarks") {
-    deleteBookmarkFromSupabase(message.bookmarkId)
+    deleteBookmarkFromSupabase(message.bookmarkId, message.user_id)
       .then((response) => sendResponse(response))
       .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.action === "signUp") {
+    signUpWithUsername(message.username, message.password).then(sendResponse);
+    return true;
+  }
+  if (message.action === "signIn") {
+    signInWithUsername(message.username, message.password).then(sendResponse);
+    return true;
+  }
+  if (message.action === "signOut") {
+    signOut().then(sendResponse);
     return true;
   }
 
   if (message.action === "deleteChat") {
-    deleteChatFromSupabase(message.chatId)
+    deleteChatFromSupabase(message.chatId, message.user_id)
       .then((response) => sendResponse(response))
       .catch((err) => sendResponse({ error: err.message }));
     return true;
   }
 
+  if (message.action === "askDeepSeek") {
+    queryDeepSeek(message.prompt).then(sendResponse).catch(sendResponse);
+    return true; // Keeps the response open for async calls
+  }
+
   if (message.action === "renameFoldersAndChats") {
-    renameItem(message.itemId, message.newTitle, message.itemType)
+    renameItem(
+      message.itemId,
+      message.newTitle,
+      message.itemType,
+      message.user_id
+    )
       .then((response) => sendResponse(response))
       .catch((err) => sendResponse({ error: err.message }));
     return true;
   }
 
   if (message.action === "updateFolderParent") {
-    updateFolderParent(message.folderId, message.parentId)
+    updateFolderParent(message.folderId, message.parentId, message.user_id)
       .then((response) => sendResponse(response))
       .catch((err) => sendResponse({ error: err.message }));
     return true;
@@ -334,7 +535,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "updateChatFolder") {
-    updateChatFolder(message.chatId, message.folderId)
+    updateChatFolder(message.chatId, message.folderId, message.user_id)
       .then((response) => sendResponse(response))
       .catch((err) => sendResponse({ error: err.message }));
     return true;
@@ -349,10 +550,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "getData") {
     Promise.all([
-      getFoldersFromSupabase(),
-      getBookmarksFromSupabase(),
-      getChatsFromSupabase(),
-      getChatsInFolders(),
+      getFoldersFromSupabase(message.user_id),
+      getBookmarksFromSupabase(message.user_id),
+      getChatsFromSupabase(message.user_id),
+      getChatsInFolders(message.user_id),
     ])
       .then(
         ([

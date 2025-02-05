@@ -10,6 +10,17 @@ function saveChat(chat) {
   });
 }
 
+function askDeepSeek(prompt, callback) {
+  chrome.runtime.sendMessage({ action: "askDeepSeek", prompt }, (response) => {
+    if (response) {
+      console.log("DeepSeek Response:", response);
+      callback(response); // Use the response in any feature
+    } else {
+      alert("Failed to get response from DeepSeek AI.");
+    }
+  });
+}
+
 // 🔹 Function to save a bookmark to Supabase
 function saveBookmark(bookmark) {
   chrome.runtime.sendMessage(
@@ -22,9 +33,72 @@ function saveBookmark(bookmark) {
   );
 }
 
-function deleteFolder(folderId) {
+function renameWithAI(title, id, type) {
+  // Show loader in the designated container (assume there's an element with id 'aiLoaderContainer')
+  const loader = document.createElement("div");
+  loader.innerText = "Loading..."; // or insert your spinner HTML here
+  loader.classList.add("loader"); // add any styling via CSS if needed
+  const loaderContainer = document.getElementById("aiLoaderContainer");
+  if (loaderContainer) {
+    loaderContainer.appendChild(loader);
+  }
+
+  // Create the prompt for DeepSeek AI using the current title
+  const prompt = `Suggest a short(upto 5 words) name but good so user can easily understand it (give only name, not any symbol or quotes), clear name for: ${title}`;
+
+  askDeepSeek(prompt, (response) => {
+    // Remove loader when response arrives
+    if (loader && loader.parentNode) {
+      loader.parentNode.removeChild(loader);
+    }
+
+    // Clean the AI response: if the response includes text wrapped in **, extract that text.
+    let newName = response.trim();
+    const match = newName.match(/\*\*(.*?)\*\*/);
+    console.log("new1", newName);
+
+    if (match) {
+      newName = match[1].trim();
+    }
+
+    console.log("new", newName);
+    // If a new name is returned, update the item and send it to the backend.
+    if (newName) {
+      chrome.storage.local.get(["user"], (result) => {
+        if (!result.user) {
+          console.warn("No user logged in.");
+          return;
+        }
+
+        const user_id = result?.user?.id;
+        title = newName;
+        // Update Supabase
+        chrome.runtime.sendMessage(
+          {
+            action: "renameFoldersAndChats",
+            itemId: id,
+            newTitle: title,
+            itemType: type,
+            user_id: user_id,
+          },
+          (response) => {
+            if (response.error) {
+              console.error("Error renaming item:", response.error);
+            } else {
+              console.log("Item renamed successfully:", response.data);
+            }
+          }
+        );
+      });
+    } else {
+      console.warn("No valid name returned from AI.");
+    }
+  });
+}
+
+function deleteFolder(folderId, user_id) {
   chrome.runtime.sendMessage(
-    { action: "deleteFolder", folderId: folderId },
+    { action: "deleteFolder", folderId: folderId, user_id: user_id },
     (response) => {
       if (response.error) {
         console.error("Error deleting folder from Supabase:", response.error);
@@ -45,9 +119,9 @@ function deleteFolder(folderId) {
   );
 }
 
-function deleteChat(chatId) {
+function deleteChat(chatId, user_id) {
   chrome.runtime.sendMessage(
-    { action: "deleteChat", chatId: chatId },
+    { action: "deleteChat", chatId: chatId, user_id: user_id },
     (response) => {
       if (response.error) {
         console.error("Error deleting chat from Supabase:", response.error);
@@ -59,9 +133,9 @@ function deleteChat(chatId) {
   );
 }
 
-function deleteBookmark(bookmarkId) {
+function deleteBookmark(bookmarkId, user_id) {
   chrome.runtime.sendMessage(
-    { action: "deleteBookmarks", bookmarkId: bookmarkId },
+    { action: "deleteBookmarks", bookmarkId: bookmarkId, user_id: user_id },
     (response) => {
       if (response.error) {
         console.error("Error deleting chat from Supabase:", response.error);
@@ -71,6 +145,236 @@ function deleteBookmark(bookmarkId) {
       }
     }
   );
+}
+
+function createAuthUI() {
+  const sidebar = document.querySelector("[title='ChatGPT']").parentElement;
+  if (!sidebar) return;
+
+  const authContainer = document.createElement("div");
+  authContainer.style.cssText = `
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px;
+    background: #1e1e1e;
+    border-radius: 8px;
+    color: white;
+    font-size: 14px;
+  `;
+
+  chrome.storage.local.get(["user"], (result) => {
+    if (result.user) {
+      // User is logged in - Show Sign Out Button
+      const userMessage = document.createElement("p");
+      userMessage.innerText = `Welcome, ${result.user.username || "User"}`;
+      userMessage.style.cssText = `
+        margin-bottom: 10px;
+        font-size: 16px;
+        font-weight: bold;
+        color: #ffeb3b;
+      `;
+
+      const signOutButton = document.createElement("button");
+      signOutButton.innerText = "Sign Out";
+      signOutButton.style.cssText = `
+        width: 90%;
+        margin: 5px;
+        padding: 10px;
+        background: #F44336;
+        border: none;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        border-radius: 5px;
+      `;
+
+      signOutButton.addEventListener("click", () => {
+        chrome.storage.local.remove("user", () => {
+          console.log("User signed out.");
+          location.reload(); // Refresh the UI
+        });
+      });
+
+      authContainer.appendChild(userMessage);
+      authContainer.appendChild(signOutButton);
+    } else {
+      // User is not logged in - Show Sign Up and Sign In Buttons
+      const authMessage = document.createElement("p");
+      authMessage.innerText = "Sign up to use this";
+      authMessage.style.cssText = `
+        margin-bottom: 10px;
+        font-size: 16px;
+        font-weight: bold;
+        color: #ffeb3b;
+      `;
+
+      const signUpButton = document.createElement("button");
+      signUpButton.innerText = "Sign Up";
+      signUpButton.style.cssText = `
+        width: 90%;
+        margin: 5px;
+        padding: 10px;
+        background: #4CAF50;
+        border: none;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        border-radius: 5px;
+      `;
+
+      const signInButton = document.createElement("button");
+      signInButton.innerText = "Sign In";
+      signInButton.style.cssText = `
+        width: 90%;
+        margin: 5px;
+        padding: 10px;
+        background: #2196F3;
+        border: none;
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        border-radius: 5px;
+      `;
+
+      signUpButton.addEventListener("click", () => openAuthModal("signUp"));
+      signInButton.addEventListener("click", () => openAuthModal("signIn"));
+
+      authContainer.appendChild(authMessage);
+      authContainer.appendChild(signUpButton);
+      authContainer.appendChild(signInButton);
+    }
+
+    sidebar.append(authContainer);
+  });
+}
+
+const observer6 = new MutationObserver((mutations, observerInstance) => {
+  const targetElement =
+    document.querySelector("[title='ChatGPT']").parentElement;
+  if (targetElement) {
+    createAuthUI();
+    observerInstance.disconnect();
+  }
+});
+
+observer6.observe(document.body, { childList: true, subtree: true });
+
+function openAuthModal(mode) {
+  // 🔹 Remove existing modal if any
+  const existingModal = document.querySelector("#auth-modal");
+  if (existingModal) existingModal.remove();
+
+  // 🔹 Create modal container
+  const modal = document.createElement("div");
+  modal.id = "auth-modal";
+  modal.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #2a2a2a;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    text-align: center;
+    z-index: 1000;
+    width: 300px;
+  `;
+
+  const title = document.createElement("h2");
+  title.innerText = mode === "signUp" ? "Sign Up" : "Sign In";
+  title.style.color = "white";
+
+  const usernameInput = document.createElement("input");
+  usernameInput.placeholder = "Enter Username";
+  usernameInput.style.cssText = `
+    display: block;
+    margin: 10px auto;
+    padding: 10px;
+    width: 90%;
+    border-radius: 5px;
+    border: 1px solid #555;
+    background: #333;
+    color: white;
+  `;
+
+  const passwordInput = document.createElement("input");
+  passwordInput.placeholder = "Enter Password";
+  passwordInput.type = "password";
+  passwordInput.style.cssText = `
+    display: block;
+    margin: 10px auto;
+    padding: 10px;
+    width: 90%;
+    border-radius: 5px;
+    border: 1px solid #555;
+    background: #333;
+    color: white;
+  `;
+
+  const actionButton = document.createElement("button");
+  actionButton.innerText = mode === "signUp" ? "Create Account" : "Login";
+  actionButton.style.cssText = `
+    width: 90%;
+    margin-top: 10px;
+    padding: 10px;
+    background: ${mode === "signUp" ? "#4CAF50" : "#2196F3"};
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    border-radius: 5px;
+  `;
+
+  const closeButton = document.createElement("button");
+  closeButton.innerText = "Close";
+  closeButton.style.cssText = `
+    margin-top: 10px;
+    padding: 8px;
+    background: #F44336;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    border-radius: 5px;
+    width: 90%;
+  `;
+
+  closeButton.addEventListener("click", () => modal.remove());
+
+  actionButton.addEventListener("click", () => {
+    const username = usernameInput.value;
+    const password = passwordInput.value;
+
+    if (!username || !password) {
+      alert("Please enter both username and password.");
+      return;
+    }
+
+    // 🔹 Call Sign Up or Sign In function
+    chrome.runtime.sendMessage(
+      { action: mode, username, password },
+      (response) => {
+        if (response.error) {
+          alert(response.error);
+        } else {
+          alert(
+            mode === "signUp" ? "Account created!" : "Logged in successfully!"
+          );
+          location.reload();
+        }
+      }
+    );
+  });
+
+  modal.appendChild(title);
+  modal.appendChild(usernameInput);
+  modal.appendChild(passwordInput);
+  modal.appendChild(actionButton);
+  modal.appendChild(closeButton);
+
+  document.body.appendChild(modal);
 }
 
 // 🔹 Function to save a folder to Supabase
@@ -83,133 +387,189 @@ function saveFolder(folder) {
 }
 
 function fetchData(retryCount = 0, updateType, updatedItem) {
-  chrome.runtime.sendMessage({ action: "getData" }, (response) => {
-    if (response.error) {
-      console.error("Error fetching data from Supabase:", response.error);
+  chrome.storage.local.get(["user"], (result) => {
+    if (!result.user) {
+      console.warn("No user logged in.");
       return;
     }
 
-    console.log("Fetching Data...");
-
-    if (
-      !response.folders ||
-      !response.bookmarks ||
-      !response.chats ||
-      !response.chatFolders
-    ) {
-      console.warn("Data not fully loaded, retrying...");
-      // if (retryCount < 5) {
-      //   // Retry max 5 times
-      //   setTimeout(() => fetchData(retryCount + 1), 500);
-      // }
-      return;
-    }
-
-    // 🔹 Ensure bookmarks are properly initialized
-    bookmarks = response.bookmarks.map((bookmark) => ({
-      id: bookmark?.id,
-      title: bookmark?.title || "Untitled Bookmark",
-      link: bookmark?.link || "#",
-    }));
-
-    console.log("Loaded Bookmarks:", bookmarks); // 🔹 Debugging: Check if bookmarks are fetched
-
-    // 🔹 Ensure all folders are initialized properly
-    let allFolders = response.folders.map((folder) => ({
-      id: folder?.id,
-      title: folder?.title || "Untitled Folder",
-      type: "folder",
-      parent_id: folder?.parent_id || null,
-      children: [],
-    }));
-
-    // 🔹 Convert list into a nested structure
-    folderData = [];
-    const folderMap = {};
-
-    // 🔹 Create a map of all folders
-    allFolders.forEach((folder) => {
-      folderMap[folder.id] = folder;
-      if (folder.parent_id === null) {
-        folderData.push(folder);
+    const user_id = result?.user?.id;
+    localStorage.setItem("user_id", user_id);
+    console.log("user", result);
+    chrome.runtime.sendMessage({ action: "getData", user_id }, (response) => {
+      if (response.error) {
+        console.error("Error fetching data from Supabase:", response.error);
+        return;
       }
-    });
 
-    // 🔹 Assign subfolders to their parent folders
-    allFolders.forEach((folder) => {
-      if (folder.parent_id !== null) {
-        const parentFolder = folderMap[folder.parent_id];
-        if (parentFolder) {
-          parentFolder.children.push(folder);
+      console.log("Fetching Data...");
+
+      if (
+        !response.folders ||
+        !response.bookmarks ||
+        !response.chats ||
+        !response.chatFolders
+      ) {
+        console.warn("Data not fully loaded, retrying...");
+        if (retryCount < 5) {
+          // Retry max 5 times
+          setTimeout(() => fetchData(retryCount + 1), 500);
+        }
+        return;
+      }
+
+      // 🔹 Ensure bookmarks are properly initialized
+      bookmarks = response.bookmarks.map((bookmark) => ({
+        id: bookmark?.id,
+        title: bookmark?.title || "Untitled Bookmark",
+        link: bookmark?.link || "#",
+      }));
+
+      console.log("Loaded Bookmarks:", bookmarks); // 🔹 Debugging: Check if bookmarks are fetched
+
+      // 🔹 Ensure all folders are initialized properly
+      let allFolders = response.folders.map((folder) => ({
+        id: folder?.id,
+        title: folder?.title || "Untitled Folder",
+        type: "folder",
+        parent_id: folder?.parent_id || null,
+        children: [],
+      }));
+
+      // 🔹 Convert list into a nested structure
+      folderData = [];
+      const folderMap = {};
+
+      // 🔹 Create a map of all folders
+      allFolders.forEach((folder) => {
+        folderMap[folder.id] = folder;
+        if (folder.parent_id === null) {
+          folderData.push(folder);
+        }
+      });
+
+      // 🔹 Assign subfolders to their parent folders
+      allFolders.forEach((folder) => {
+        if (folder.parent_id !== null) {
+          const parentFolder = folderMap[folder.parent_id];
+          if (parentFolder) {
+            parentFolder.children.push(folder);
+          }
+        }
+      });
+
+      // 🔹 Place chats inside their respective folders
+      response.chatFolders.forEach((relation) => {
+        const folder = folderMap[relation.folder_id];
+        if (folder) {
+          folder.children.push({
+            id: relation.chat_id,
+            title: relation.chats?.title || "Untitled Chat",
+            link: relation.chats?.link || "#",
+            type: "file",
+          });
+        }
+      });
+
+      console.log("Final Folder Structure:", folderData);
+
+      if (updateType === "INSERT") {
+        console.log("New item added:", updatedItem);
+
+        if (table === "bookmarks") {
+          const newBookmark = {
+            id: updatedItem.id,
+            title: updatedItem.title || "Untitled Bookmark",
+            link: updatedItem.link || "#",
+          };
+
+          bookmarks.push(newBookmark);
+          updateBookmarksDisplay(); // 🔹 Ensure UI updates with new bookmarks
+        } else if (table === "folders") {
+          if (!folderMap[updatedItem.id]) {
+            const newFolder = {
+              id: updatedItem.id,
+              title: updatedItem.title || "Untitled Folder",
+              type: "folder",
+              parent_id: updatedItem.parent_id || null,
+              children: [],
+            };
+
+            folderMap[newFolder.id] = newFolder;
+
+            if (newFolder.parent_id === null) {
+              folderData.push(newFolder);
+            } else {
+              const parentFolder = folderMap[newFolder.parent_id];
+              if (parentFolder) {
+                parentFolder.children.push(newFolder);
+              }
+            }
+          }
+        }
+      } else if (updateType === "UPDATE") {
+        console.log("Item updated:", updatedItem);
+        if (table === "bookmarks") {
+          const existingBookmark = bookmarks.find(
+            (b) => b.id === updatedItem.id
+          );
+          if (existingBookmark) existingBookmark.title = updatedItem.title;
+        } else if (table === "folders") {
+          const existingFolder = folderMap[updatedItem.id];
+          if (existingFolder) existingFolder.title = updatedItem.title;
+        }
+      } else if (updateType === "DELETE") {
+        console.log("Item deleted:", updatedItem);
+        if (table === "bookmarks") {
+          bookmarks = bookmarks.filter((b) => b.id !== updatedItem.id);
+          updateBookmarksDisplay(); // 🔹 Ensure UI updates after deleting a bookmark
+        } else if (table === "folders") {
+          folderData = folderData.filter((item) => item.id !== updatedItem.id);
+        }
+      }
+
+      // 🔹 Sort folders by `id` to maintain order
+      folderData.sort((a, b) => a.id - b.id);
+      folderData.forEach((folder) => {
+        folder.children.sort((a, b) => a.id - b.id);
+      });
+
+      // 🔹 Update UI only when all data is loaded
+      if (folderData.length > 0 || bookmarks.length > 0 || chats.length > 0) {
+        renderFolders(folderData, document.querySelector(".folders"));
+        updateBookmarksDisplay(); // 🔹 Ensure this runs after bookmarks are set
+      } else {
+        console.warn("Data still empty, retrying...");
+        if (retryCount < 5) {
+          setTimeout(() => fetchData(retryCount + 1), 500);
+          console.log("1");
         }
       }
     });
-
-    // 🔹 Place chats inside their respective folders
-    response.chatFolders.forEach((relation) => {
-      const folder = folderMap[relation.folder_id];
-      if (folder) {
-        folder.children.push({
-          id: relation.chat_id,
-          title: relation.chats?.title || "Untitled Chat",
-          link: relation.chats?.link || "#",
-          type: "file",
-        });
-      }
-    });
-
-    console.log("Final Folder Structure:", folderData);
-
-    // 🔹 Sort folders by `id` to maintain order
-    folderData.sort((a, b) => a.id - b.id);
-    folderData.forEach((folder) => {
-      folder.children.sort((a, b) => a.id - b.id); // ✅ Maintain order inside folders
-    });
-
-    // 🔹 Update UI only when all data is loaded
-    if (folderData.length > 0 || bookmarks.length > 0 || chats.length > 0) {
-      renderFolders(folderData, document.querySelector(".folders"));
-      updateBookmarksDisplay(); // 🔹 Ensure this runs after bookmarks are set
-    } else {
-      console.warn("Data still empty, retrying...");
-      // if (retryCount < 5) {
-      //   setTimeout(() => fetchData(retryCount + 1), 500);
-      //   console.log('1')
-
-      // }
-    }
   });
 }
 
 // 🔹 Call `fetchData` when the extension loads
 fetchData();
 
-// content.js
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "realtimeUpdate") {
-    console.log("Realtime payload:", message.payload);
+    console.log("🔄 Real-time update received:", message);
 
-    // Force full refresh for all event types
-    fetchData();
+    const { table, updateType, updatedItem } = message;
 
-    // Specific handling for inserts
-    if (message.payload.eventType === "INSERT") {
-      const newFolder = message.payload.new;
-      console.log("New folder detected:", newFolder);
-
-      // Add directly to UI while waiting for full refresh
-      const tempElement = createFolderElement({
-        id: newFolder.id,
-        title: newFolder.title,
-        type: "folder",
-        parent_id: newFolder.parent_id,
-        children: [],
-      });
-
-      document.querySelector(".folders").prepend(tempElement);
+    // 🔹 Refresh only the affected data instead of reloading everything
+    if (
+      table === "folders" ||
+      table === "bookmarks" ||
+      table === "chats" ||
+      table === "chats_folder"
+    ) {
+      fetchData(updateType, updatedItem);
     }
   }
 });
+
 // const link = document.createElement("link");
 // link.rel = "stylesheet";
 // link.href = chrome.runtime.getURL("styles.css");
@@ -686,29 +1046,38 @@ function renderFolders(folderArray, container, depth = 0) {
 }
 
 function createFolder(parentId = null) {
-  const folderName = prompt("Enter Folder Name:");
-  if (!folderName) return;
-
-  const newFolder = {
-    id: Math.floor(Math.random() * 1000000),
-    title: folderName,
-    parent_id: parentId, // Assign parent folder ID if provided
-    type: "folder",
-    children: [],
-  };
-
-  // 🔹 Save new folder to Supabase
-  chrome.runtime.sendMessage(
-    { action: "saveFolder", folder: newFolder },
-    (response) => {
-      if (response.error) {
-        console.error("Error saving folder to Supabase:", response.error);
-      } else {
-        console.log("Folder successfully saved:", response.data);
-        fetchData(); // Reload data after creating folder
-      }
+  chrome.storage.local.get(["user"], (result) => {
+    if (!result.user) {
+      console.warn("No user logged in.");
+      return;
     }
-  );
+
+    const user_id = result.user.id; // ✅ Ensure we get the correct user ID
+
+    const folderName = prompt("Enter Folder Name:");
+    if (!folderName) return;
+
+    const newFolder = {
+      title: folderName,
+      parent_id: parentId,
+      user_id: user_id, // ✅ Include user_id
+      type: "folder",
+      children: [],
+    };
+
+    // 🔹 Send the folder with user ID to `background.mjs`
+    chrome.runtime.sendMessage(
+      { action: "saveFolder", folder: newFolder },
+      (response) => {
+        if (response.error) {
+          console.error("Error saving folder to Supabase:", response.error);
+        } else {
+          console.log("Folder successfully saved:", response.data);
+          fetchData(); // Reload UI
+        }
+      }
+    );
+  });
 }
 
 function createFolderElement(folder, index, depth) {
@@ -719,6 +1088,7 @@ function createFolderElement(folder, index, depth) {
 
   const folderTitle = document.createElement("p");
   folderTitle.textContent = folder.title;
+  folderTitle.id = "aiLoaderContainer";
   folderTitle.style.cssText = `
   background-color: ${folder.type === "folder" ? backgroundColor : "black"};
   padding: 5px; border-radius: 5px; color: ${
@@ -806,61 +1176,78 @@ function createFolderElement(folder, index, depth) {
           return;
         }
 
-        if (draggedItem.type === "file" || draggedItem.type === "folder") {
-          // Find the dragged folder or file and preserve its children if it's a folder
-          const draggedItemData = findItemById(folderData, draggedItem.id);
+        chrome.storage.local.get(["user"], (result) => {
+          if (!result.user) {
+            console.warn("No user logged in.");
+            return;
+          }
 
-          // Remove from old location
-          removeItemFromFolder(folderData, draggedItem.id);
+          const user_id = result?.user?.id;
 
-          // 🔹 Step 2: Update chat folder in Supabase
-          chrome.runtime.sendMessage(
-            {
-              action: "updateChatFolder",
-              chatId: draggedItem.id,
-              folderId: folder.id,
-            },
-            (response) => {
-              if (response.error) {
-                console.error("Error updating chat folder:", response.error);
-              } else {
-                console.log("Chat folder updated in Supabase:", response.data);
-                fetchData(); // ✅ Refresh UI after update
+          if (draggedItem.type === "file" || draggedItem.type === "folder") {
+            // Find the dragged folder or file and preserve its children if it's a folder
+            const draggedItemData = findItemById(folderData, draggedItem.id);
+
+            // Remove from old location
+            removeItemFromFolder(folderData, draggedItem.id);
+
+            // 🔹 Step 2: Update chat folder in Supabase
+            chrome.runtime.sendMessage(
+              {
+                action: "updateChatFolder",
+                chatId: draggedItem.id,
+                folderId: folder.id,
+                user_id: user_id,
+              },
+              (response) => {
+                if (response.error) {
+                  console.error("Error updating chat folder:", response.error);
+                } else {
+                  console.log(
+                    "Chat folder updated in Supabase:",
+                    response.data
+                  );
+                  fetchData(); // ✅ Refresh UI after update
+                }
               }
-            }
-          );
+            );
 
-          // Update parent_id in Supabase
-          chrome.runtime.sendMessage(
-            {
-              action: "updateFolderParent",
-              folderId: draggedItem.id,
-              parentId: folder.id,
-            },
-            (response) => {
-              if (response.error) {
-                console.error("Error updating folder parent:", response.error);
-              } else {
-                console.log(
-                  "Folder parent updated in Supabase:",
-                  response.data
-                );
+            // Update parent_id in Supabase
+            chrome.runtime.sendMessage(
+              {
+                action: "updateFolderParent",
+                folderId: draggedItem.id,
+                parentId: folder.id,
+                user_id: user_id,
+              },
+              (response) => {
+                if (response.error) {
+                  console.error(
+                    "Error updating folder parent:",
+                    response.error
+                  );
+                } else {
+                  console.log(
+                    "Folder parent updated in Supabase:",
+                    response.data
+                  );
+                }
               }
-            }
-          );
+            );
 
-          // Add to new location
-          folder.children.unshift({
-            id: draggedItemData.id,
-            title: draggedItemData.title,
-            type: draggedItemData.type,
-            children: draggedItemData.children || [], // Preserve children if it's a folder
-          });
+            // Add to new location
+            // folder.children.unshift({
+            //   id: draggedItemData.id,
+            //   title: draggedItemData.title,
+            //   type: draggedItemData.type,
+            //   children: draggedItemData.children || [], // Preserve children if it's a folder
+            // });
 
-          // Save and re-render
-          chrome.storage.local.set({ folderData: folderData });
-          renderFolders(folderData, document.querySelector(".folders"));
-        }
+            // // Save and re-render
+            // chrome.storage.local.set({ folderData: folderData });
+            renderFolders(folderData, document.querySelector(".folders"));
+          }
+        });
       } catch (err) {
         console.error("Error processing drop:", err);
       }
@@ -936,105 +1323,160 @@ function createFolderElement(folder, index, depth) {
       try {
         const draggedItem = JSON.parse(e.dataTransfer.getData("text/plain"));
         if (draggedItem.type === "file") {
-          // Remove from old location
-          removeItemFromFolder(folderData, draggedItem.id);
+          chrome.storage.local.get(["user"], (result) => {
+            if (!result.user) {
+              console.warn("No user logged in.");
+              return;
+            }
 
-          console.log("me", draggedItem, folder?.id);
+            const user_id = result.user.id;
+            const chatId = draggedItem?.id;
+            const newFolderId = folder?.id;
 
-          const newChat = {
-            title: draggedItem?.title,
-            type: "file",
-            children: null,
-            link: draggedItem?.link,
-          };
+            if (!chatId || !newFolderId) {
+              console.warn("Invalid chat or folder ID.");
+              return;
+            }
 
-          const exists = folderData.some((f) => f.id === draggedItem?.id);
-          console.log("Exists in folderData?", exists);
-
-          if (!exists) {
-            console.log("dragFold");
-            // 🔹 Step 2: save chat To folder in Supabase
+            // 🔹 Fetch latest chats and chatFolders
             chrome.runtime.sendMessage(
-              { action: "saveChat", chat: newChat },
-
+              { action: "getData", user_id },
               (response) => {
                 if (response.error) {
-                  console.error(
-                    "Error saving chat to Supabase:",
-                    response.error
+                  console.error("Error fetching data:", response.error);
+                  return;
+                }
+
+                console.log("Fetched Latest Data:", response);
+
+                // 🔹 Check if the chat exists in `chats`
+                const chatExistsInChats = response.chats.some(
+                  (chat) => chat.id === chatId
+                );
+
+                if (!chatExistsInChats) {
+                  console.log(
+                    `Chat ${chatId} does not exist. Saving new chat...`
                   );
-                } else {
-                  console.log("Chat successfully saved:", response.data);
 
-                  // 🔹 Now, get the actual chat ID from Supabase
-                  const chatId = response?.data[0]?.id; // Supabase returns an array
+                  const newChat = {
+                    title: draggedItem?.title,
+                    type: "file",
+                    link: draggedItem?.link,
+                    user_id: user_id,
+                  };
 
-                  if (!chatId) {
-                    console.error("Chat ID not received from Supabase");
-                    return;
-                  }
-
+                  // 🔹 Save the chat first
                   chrome.runtime.sendMessage(
-                    {
-                      action: "saveChatToFolder",
-                      chatId: chatId, // Use actual chat ID from Supabase
-                      folderId: folder?.id,
-                    },
-                    (folderResponse) => {
-                      if (folderResponse.error) {
-                        console.error(
-                          "Error saving chat to folder:",
-                          folderResponse.error
-                        );
+                    { action: "saveChat", chat: newChat },
+                    (chatResponse) => {
+                      if (chatResponse.error) {
+                        console.error("Error saving chat:", chatResponse.error);
                       } else {
                         console.log(
-                          "Chat successfully linked to folder:",
-                          folderResponse.data
+                          "Chat saved successfully:",
+                          chatResponse.data
                         );
+
+                        // Get the actual chat ID from the response
+                        const savedChatId = chatResponse?.data[0]?.id;
+                        console.log("Saved Chat ID:", savedChatId);
+
+                        if (!savedChatId) {
+                          console.error("Chat ID missing from response.");
+                          return;
+                        }
+
+                        // 🔹 Now save chat-folder relationship
+                        saveChatFolder(savedChatId, newFolderId, user_id);
                       }
                     }
                   );
-                }
-              }
-            );
-          }
-
-          if (folderData.find((f) => f.id === draggedItem?.id)) {
-            console.log("aded");
-            chrome.runtime.sendMessage(
-              {
-                action: "updateChatFolder",
-                chatId: draggedItem?.id,
-                folderId: folder?.id,
-              },
-              (response) => {
-                if (response.error) {
-                  console.error("Error updating chat folder:", response.error);
                 } else {
                   console.log(
-                    "Chat folder updated in Supabase:",
-                    response.data
+                    `Chat ${chatId} already exists. Checking folder association...`
                   );
 
-                  fetchData(); // Refresh UI after update
+                  // 🔹 Check if chat is already in the folder
+                  const chatExistsInFolder = response.chatFolders.some(
+                    (chatFolder) =>
+                      chatFolder.chat_id === chatId &&
+                      chatFolder.folder_id === newFolderId
+                  );
+
+                  if (chatExistsInFolder) {
+                    console.log(
+                      `Chat ${chatId} already exists in folder ${newFolderId}. Updating...`
+                    );
+
+                    chrome.runtime.sendMessage(
+                      {
+                        action: "updateChatFolder",
+                        chatId,
+                        folderId: newFolderId,
+                        user_id,
+                      },
+                      (updateResponse) => {
+                        if (updateResponse.error) {
+                          console.error(
+                            "Error updating chat folder:",
+                            updateResponse.error
+                          );
+                        } else {
+                          console.log(
+                            "Chat updated successfully:",
+                            updateResponse.data
+                          );
+                          fetchData(); // Reload UI
+                        }
+                      }
+                    );
+                  } else {
+                    console.log(
+                      `Chat ${chatId} does not exist in folder ${newFolderId}. Saving new chat-folder link...`
+                    );
+                    saveChatFolder(chatId, newFolderId, user_id);
+                  }
+                }
+              }
+            );
+          });
+
+          // 🔹 Function to save chat-folder relationship
+          function saveChatFolder(chatId, folderId, userId) {
+            chrome.runtime.sendMessage(
+              { action: "saveChatFolder", chatId, folderId, user_id: userId },
+              (response) => {
+                if (response.error) {
+                  console.error("Error saving chat folder:", response.error);
+                } else {
+                  console.log(
+                    "Chat linked to folder successfully:",
+                    response.data
+                  );
+                  fetchData(); // Reload UI
                 }
               }
             );
           }
 
-          console.log("dragged", folderData);
-
-          // Add to new location
-          folder.children.unshift({
-            id: draggedItem.id,
-            title: draggedItem.title,
-            type: "file",
-            children: [],
-          });
-
-          // Save and re-render
-          chrome.storage.local.set({ folderData: folderData });
-          renderFolders(folderData, document.querySelector(".folders"));
+          // 🔹 Helper function to save chat-folder association
+          function saveChatFolder(chatId, folderId, userId) {
+            chrome.runtime.sendMessage(
+              { action: "saveChatFolder", chatId, folderId, user_id: userId },
+              (response) => {
+                if (response.error) {
+                  console.error("Error saving chat folder:", response.error);
+                } else {
+                  console.log(
+                    "Chat linked to folder successfully:",
+                    response.data
+                  );
+                  fetchData(); // Reload UI after save
+                }
+              }
+            );
+          }
         }
       } catch (err) {
         console.error("Error processing drop:", err);
@@ -1181,9 +1623,9 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
   menu.innerHTML = `
     <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer;">➕ Add Folder</button>
     <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer;">✏️ Rename</button>
+    <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer;">🤖 Rename with AI</button>
     <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer; color: #ff4d4d;">🗑️ Delete</button>
   `;
-
   // Remove the "Add Folder" button if the item is a file
   if (folder.type === "file") {
     menu.querySelector("button").style.display = "none"; // Hide "Add Folder"
@@ -1202,92 +1644,124 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     menu.style.display = "none";
   });
 
-  const [addSubfolderButton, renameButton, deleteFolderButton] =
+  const [addSubfolderButton, renameButton, aiRenameButton, deleteFolderButton] =
     menu.querySelectorAll(".contextOption");
 
   // Add Subfolder
   addSubfolderButton.addEventListener("click", () => {
-    if (depth >= 20) {
-      alert("Maximum nesting depth is 3.");
-      return;
-    }
-    const name = prompt("Enter subfolder name:");
-    if (name) {
-      const newFolder = {
-        title: `📁${name}`,
-        type: "folder",
-        children: null,
-        parent_id: parseInt(sessionStorage.getItem("folderId")),
-      };
+    chrome.storage.local.get(["user"], (result) => {
+      if (!result.user) {
+        console.warn("No user logged in.");
+        return;
+      }
 
-      // Save to Supabase
-      saveFolder(newFolder);
+      if (depth >= 20) {
+        alert("Maximum nesting depth is 3.");
+        return;
+      }
 
-      folder.children.push({
-        id: generateRandomId(),
-        title: `📁${name}`,
-        type: "folder",
-        children: [],
-      });
-      renderFolders(folderData, document.querySelector(".folders"));
-      console.log("arr", folderData);
-    }
+      const user_id = result?.user?.id;
+
+      const name = prompt("Enter subfolder name:");
+      if (name) {
+        const newFolder = {
+          title: `📁${name}`,
+          type: "folder",
+          children: null,
+          parent_id: parseInt(sessionStorage.getItem("folderId")),
+          user_id: user_id,
+        };
+
+        // Save to Supabase
+        saveFolder(newFolder);
+
+        folder.children.push({
+          id: generateRandomId(),
+          title: `📁${name}`,
+          type: "folder",
+          children: [],
+        });
+        renderFolders(folderData, document.querySelector(".folders"));
+        console.log("arr", folderData);
+      }
+    });
   });
 
   // Rename Folder/File
   renameButton.addEventListener("click", () => {
-    const newName = prompt("Enter new name:", folder.title.replace("📁", ""));
-    if (newName) {
-      folder.title = folder.type === "folder" ? `📁${newName}` : newName;
+    chrome.storage.local.get(["user"], (result) => {
+      if (!result.user) {
+        console.warn("No user logged in.");
+        return;
+      }
+      const user_id = result?.user?.id;
+      const newName = prompt("Enter new name:", folder.title.replace("📁", ""));
+      if (newName) {
+        folder.title = folder.type === "folder" ? `📁${newName}` : newName;
 
-      // Update Supabase
-      chrome.runtime.sendMessage(
-        {
-          action: "renameFoldersAndChats",
-          itemId: folder.id,
-          newTitle: newName,
-          itemType: folder.type,
-        },
-        (response) => {
-          if (response.error) {
-            console.error("Error renaming item:", response.error);
-          } else {
-            console.log("Item renamed successfully:", response.data);
+        // Update Supabase
+        chrome.runtime.sendMessage(
+          {
+            action: "renameFoldersAndChats",
+            itemId: folder.id,
+            newTitle: newName,
+            itemType: folder.type,
+            user_id: user_id,
+          },
+          (response) => {
+            if (response.error) {
+              console.error("Error renaming item:", response.error);
+            } else {
+              console.log("Item renamed successfully:", response.data);
+            }
           }
-        }
-      );
+        );
 
-      renderFolders(folderData, document.querySelector(".folders"));
-      // Save updated folder data to storage
-      chrome.storage.local.set({ folderData: folderData });
-    }
+        renderFolders(folderData, document.querySelector(".folders"));
+        // Save updated folder data to storage
+        chrome.storage.local.set({ folderData: folderData });
+      }
+    });
   });
 
   // Delete Folder/File
   deleteFolderButton.addEventListener("click", () => {
-    const parent = folderData.find((f) => f.children.includes(folder));
-    if (parent) parent.children = parent.children.filter((f) => f !== folder);
-    else folderData = folderData.filter((f) => f !== folder);
+    // const parent = folderData.find((f) => f.children.includes(folder));
+    // if (parent) parent.children = parent.children.filter((f) => f !== folder);
+    // else folderData = folderData.filter((f) => f !== folder);
 
-    if (folder.type === "folder") {
-      // ✅ Handle folder deletion
-      if (
-        confirm(
-          `Are you sure you want to delete "${folder.title}"? This will delete all subfolders and chats inside it.`
-        )
-      ) {
-        deleteFolder(folder.id);
+    chrome.storage.local.get(["user"], (result) => {
+      if (!result.user) {
+        console.warn("No user logged in.");
+        return;
       }
-    } else {
-      // ✅ Handle folder deletion
-      if (confirm(`Are you sure you want to delete "${folder.title}"?`)) {
-        deleteChat(folder.id);
-      }
-    }
 
-    renderFolders(folderData, document.querySelector(".folders"));
-    // Save to storage after deleting folder
-    chrome.storage.local.set({ folderData: folderData });
+      const user_id = result?.user?.id;
+
+      if (folder.type === "folder") {
+        // ✅ Handle folder deletion
+        if (
+          confirm(
+            `Are you sure you want to delete "${folder.title}"? This will delete all subfolders and chats inside it.`
+          )
+        ) {
+          deleteFolder(folder.id, user_id);
+        }
+      } else {
+        // ✅ Handle folder deletion
+        if (confirm(`Are you sure you want to delete "${folder.title}"?`)) {
+          deleteChat(folder.id, user_id);
+        }
+      }
+
+      renderFolders(folderData, document.querySelector(".folders"));
+      // Save to storage after deleting folder
+      chrome.storage.local.set({ folderData: folderData });
+    });
+  });
+  // AI-based rename option
+  aiRenameButton.addEventListener("click", () => {
+    renameWithAI(folder?.title, folder?.id, folder?.type);
   });
 }
 
@@ -1319,26 +1793,38 @@ function setupAddFolderButton(button) {
   });
 
   saveButton.addEventListener("click", () => {
-    const name = input.value.trim();
-    if (name) {
-      const newFolder = { title: `📁${name}`, type: "folder", children: null };
+    chrome.storage.local.get(["user"], (result) => {
+      if (!result.user) {
+        console.warn("No user logged in.");
+        return;
+      }
+      const name = input.value.trim();
+      if (name) {
+        const user_id = result?.user?.id;
+        const newFolder = {
+          title: `📁${name}`,
+          type: "folder",
+          children: null,
+          user_id: user_id,
+        };
 
-      // Save to Supabase
-      saveFolder(newFolder);
+        // Save to Supabase
+        saveFolder(newFolder);
 
-      folderData.push({
-        id: generateRandomId(),
-        title: `📁${name}`,
-        type: "folder",
-        children: [],
-      });
-      renderFolders(folderData, document.querySelector(".folders"));
-      input.value = "";
-      modal.style.display = "none";
-      // Save to storage after adding folder
-      chrome.storage.local.set({ folderData: folderData });
-      console.log("arr", folderData);
-    }
+        // folderData.push({
+        //   id: generateRandomId(),
+        //   title: `📁${name}`,
+        //   type: "folder",
+        //   children: [],
+        // });
+        renderFolders(folderData, document.querySelector(".folders"));
+        input.value = "";
+        modal.style.display = "none";
+        // Save to storage after adding folder
+        chrome.storage.local.set({ folderData: folderData });
+        console.log("arr", folderData);
+      }
+    });
   });
 
   cancelButton.addEventListener("click", () => {
@@ -1465,37 +1951,46 @@ const observer2 = new MutationObserver((mutations) => {
 
             // Bookmark button click handler
             bookmarkBtn.addEventListener("click", () => {
-              const isCurrentlyBookmarked = bookmarks.some(
-                (b) => b.link === chatLink
-              );
+              chrome.storage.local.get(["user"], (result) => {
+                if (!result.user) {
+                  console.warn("No user logged in.");
+                  return;
+                }
+                const isCurrentlyBookmarked = bookmarks.some(
+                  (b) => b.link === chatLink
+                );
 
-              if (isCurrentlyBookmarked) {
-                // Remove bookmark
-                bookmarks = bookmarks.filter((b) => b.link !== chatLink);
-                bookmarkBtn.innerText = "☆ Bookmark";
-              } else {
-                const newBookmark = {
-                  title: chatTitle,
-                  link: chatLink,
-                };
-                // Add bookmark
-                saveBookmark(newBookmark);
+                const user_id = result?.user?.id;
 
-                bookmarks.push({
-                  id: generateRandomId(),
-                  title: chatTitle,
-                  link: chatLink,
-                  timestamp: new Date().toISOString(),
-                });
-                bookmarkBtn.innerText = "🌟 Bookmarked";
-              }
+                if (isCurrentlyBookmarked) {
+                  // Remove bookmark
+                  bookmarks = bookmarks.filter((b) => b.link !== chatLink);
+                  bookmarkBtn.innerText = "☆ Bookmark";
+                } else {
+                  const newBookmark = {
+                    title: chatTitle,
+                    link: chatLink,
+                    user_id: user_id,
+                  };
+                  // Add bookmark
+                  saveBookmark(newBookmark);
 
-              // Save updated bookmarks
-              chrome.storage.local.set({ bookmarks: bookmarks });
-              console.log("Updated bookmarks:", bookmarks);
+                  // bookmarks.push({
+                  //   id: generateRandomId(),
+                  //   title: chatTitle,
+                  //   link: chatLink,
+                  //   timestamp: new Date().toISOString(),
+                  // });
+                  bookmarkBtn.innerText = "🌟 Bookmarked";
+                }
 
-              // Update bookmarks display in UI
-              updateBookmarksDisplay();
+                // Save updated bookmarks
+                // chrome.storage.local.set({ bookmarks: bookmarks });
+                // console.log("Updated bookmarks:", bookmarks);
+
+                // Update bookmarks display in UI
+                updateBookmarksDisplay();
+              });
             });
 
             // Get the current page URL
@@ -1671,97 +2166,120 @@ const observer2 = new MutationObserver((mutations) => {
                 buttonSection.appendChild(close);
 
                 saveButton.addEventListener("click", () => {
-                  if (checkBox.length > 0) {
-                    const selectedFolders = findFoldersById(
-                      folderData,
-                      checkBox
-                    );
+                  chrome.storage.local.get(["user"], (result) => {
+                    if (!result.user) {
+                      console.warn("No user logged in.");
+                      return;
+                    }
 
-                    const newChat = {
-                      title: name,
-                      type: "file",
-                      children: null,
-                      link: localStorage.getItem("link"),
-                    };
+                    const user_id = result?.user?.id;
 
-                    // 🔹 Save chat to Supabase first
-                    chrome.runtime.sendMessage(
-                      { action: "saveChat", chat: newChat },
-                      (response) => {
-                        if (response.error) {
-                          console.error(
-                            "Error saving chat to Supabase:",
-                            response.error
-                          );
-                        } else {
-                          console.log(
-                            "Chat successfully saved:",
-                            response.data
-                          );
+                    if (checkBox.length > 0) {
+                      const selectedFolders = findFoldersById(
+                        folderData,
+                        checkBox
+                      );
 
-                          // 🔹 Now, get the actual chat ID from Supabase
-                          const chatId = response?.data[0]?.id; // Supabase returns an array
-                          console.log(response, "respo");
+                      const newChat = {
+                        title: name,
+                        type: "file",
+                        children: null,
+                        link: localStorage.getItem("link"),
+                        user_id: user_id,
+                      };
 
-                          if (!chatId) {
-                            console.error("Chat ID not received from Supabase");
-                            return;
-                          }
-
-                          // 🔹 Now link the chat to the selected folders
-                          selectedFolders.forEach((folder) => {
-                            chrome.runtime.sendMessage(
-                              {
-                                action: "saveChatToFolder",
-                                chatId: chatId, // Use actual chat ID from Supabase
-                                folderId: folder.id,
-                              },
-                              (folderResponse) => {
-                                if (folderResponse.error) {
-                                  console.error(
-                                    "Error saving chat to folder:",
-                                    folderResponse.error
-                                  );
-                                } else {
-                                  console.log(
-                                    "Chat successfully linked to folder:",
-                                    folderResponse.data
-                                  );
-                                }
-                              }
+                      // 🔹 Save chat to Supabase first
+                      chrome.runtime.sendMessage(
+                        { action: "saveChat", chat: newChat },
+                        (response) => {
+                          if (response.error) {
+                            console.error(
+                              "Error saving chat to Supabase:",
+                              response.error
+                            );
+                          } else {
+                            console.log(
+                              "Chat successfully saved:",
+                              response.data
                             );
 
-                            // Add chat inside the folder in the UI
-                            folder.children.unshift({
-                              id: chatId,
-                              title: newChat.title,
-                              type: "file",
-                              children: [],
-                              link: newChat.link,
+                            // 🔹 Now, get the actual chat ID from Supabase
+                            const chatId = response?.data[0]?.id; // Supabase returns an array
+                            console.log(response, "respo");
+
+                            if (!chatId) {
+                              console.error(
+                                "Chat ID not received from Supabase"
+                              );
+                              return;
+                            }
+
+                            // 🔹 Now link the chat to the selected folders
+                            selectedFolders.forEach((folder) => {
+                              chrome.storage.local.get(["user"], (result) => {
+                                if (!result.user) {
+                                  console.warn("No user logged in.");
+                                  return;
+                                }
+
+                                const user_id = result?.user?.id;
+                                chrome.runtime.sendMessage(
+                                  {
+                                    action: "saveChatToFolder",
+                                    chatId: chatId, // Use actual chat ID from Supabase
+                                    folderId: folder.id,
+                                    user_id: user_id,
+                                  },
+                                  (folderResponse) => {
+                                    if (folderResponse.error) {
+                                      console.error(
+                                        "Error saving chat to folder:",
+                                        folderResponse.error
+                                      );
+                                    } else {
+                                      console.log(
+                                        "Chat successfully linked to folder:",
+                                        folderResponse.data
+                                      );
+                                    }
+                                  }
+                                );
+
+                                // Add chat inside the folder in the UI
+                                // folder.children.unshift({
+                                //   id: chatId,
+                                //   title: newChat.title,
+                                //   type: "file",
+                                //   children: [],
+                                //   link: newChat.link,
+                                // });
+                              });
                             });
-                          });
 
-                          // Reset checkboxes
-                          checkBox = [];
+                            // Reset checkboxes
+                            checkBox = [];
 
-                          // Update UI
-                          renderFolders(
-                            folderData,
-                            document.querySelector(".folders")
-                          );
-                          chrome.storage.local.set({ folderData: folderData });
+                            // Update UI
+                            renderFolders(
+                              folderData,
+                              document.querySelector(".folders")
+                            );
+                            chrome.storage.local.set({
+                              folderData: folderData,
+                            });
 
-                          // Close modal
-                          modalContainer.style.transform = "scale(0)";
-                          setTimeout(() => {
-                            modalContainer.remove();
-                          }, 500);
+                            // Close modal
+                            modalContainer.style.transform = "scale(0)";
+                            setTimeout(() => {
+                              modalContainer.remove();
+                            }, 500);
+                          }
                         }
-                      }
-                    );
-                  } else {
-                    alert("Please select at least one folder");
-                  }
+                      );
+                    } else {
+                      alert("Please select at least one folder");
+                    }
+                  });
                 });
 
                 close.addEventListener("click", () => {
@@ -2021,8 +2539,39 @@ function searchSubfolders(container, searchTerm) {
 
 function setupSearchBar() {
   const searchInput = document.getElementById("folderSearch");
+  let searchTimeout = null;
   searchInput.addEventListener("input", (e) => {
     const searchTerm = e.target.value.trim();
+
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      // Create a summary of your data (you can adjust this as needed)
+      const folderTitles = folderData
+        .map((folder) => {
+          const titles = [];
+          const traverse = (folder) => {
+            titles.push(folder.title);
+            if (folder.children) {
+              folder.children.forEach(traverse);
+            }
+          };
+          traverse(folder);
+          return titles.join(", ");
+        })
+        .join(", ");
+
+      const context = `Folders: ${folderTitles}`;
+      const prompt = `${context}\nonly give me the folder name(only name no other text) closed to this query: ${searchTerm}`;
+
+      askDeepSeek(prompt, (response) => {
+        const match = response.match(/\*\*(.*?)\*\*/);
+        let extracted = match ? match[1] : response;
+        console.log("AI Search Result: " + extracted);
+
+        if (extracted) searchFolders(extracted);
+      });
+    }, 700); // Debounce by 700ms
+
     searchFolders(searchTerm);
   });
 }
@@ -2086,12 +2635,19 @@ function updateBookmarksDisplay() {
 
     const removeBtn = bookmarkElement.querySelector(".remove-bookmark");
     removeBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      deleteBookmark(bookmark?.id);
-      bookmarks = bookmarks.filter((b) => b.id !== bookmark.id);
-      chrome.storage.local.set({ bookmarks: bookmarks });
-      updateBookmarksDisplay();
+      chrome.storage.local.get(["user"], (result) => {
+        if (!result.user) {
+          console.warn("No user logged in.");
+          return;
+        }
+        const user_id = result?.user?.id;
+        e.preventDefault();
+        e.stopPropagation();
+        deleteBookmark(bookmark?.id, user_id);
+        // bookmarks = bookmarks.filter((b) => b.id !== bookmark.id);
+        chrome.storage.local.set({ bookmarks: bookmarks });
+        updateBookmarksDisplay();
+      });
     });
 
     bookmarksList.appendChild(bookmarkElement);

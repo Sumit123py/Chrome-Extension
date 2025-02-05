@@ -11,7 +11,7 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "imresizer-1731312355421.png"
+      "16": "./image/folders.png"
     }
   },
   "content_security_policy": {
