@@ -666,6 +666,8 @@ const observer4 = new MutationObserver((mutations, observerInstance) => {
 
     // Ensure the container has position: relative for absolute positioning
     widthContainer.style.position = "relative";
+    widthContainer.style.width = '400px'
+    widthContainer.firstChild.style.width = '400px'
 
     // Hide the scrollbars but keep scrolling functionality
     widthContainer.style.overflow = "auto";
@@ -2981,6 +2983,7 @@ function displayNotes(chatId, notes) {
     const noteActions = document.createElement("div");
     noteActions.style.cssText = `
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
       margin-top: 8px;
     `;
