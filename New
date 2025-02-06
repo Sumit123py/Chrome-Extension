@@ -1,0 +1,24 @@
+To address your requests, I'll create a React Project with multiple components to implement the smooth folder animation, chat notes feature, and notes management. Let's start with the implementation:
+
+```typescriptreact project="chat-notes-feature"
+...
+```
+
+This implementation addresses your requirements:
+
+1. Smooth Folder Animation: The `ExpandableContent` component uses CSS animations to smoothly expand and collapse folders.
+2. Chat Notes Feature:
+
+1. Right-clicking on a chat displays a "Create Notes" option (simulated with a button in this implementation).
+2. Clicking "Create Notes" opens a modal centered on the page with a nested UI.
+3. Users can write notes inside the modal.
+4. A small button with a down arrow icon and tooltip is added next to each chat.
+5. Clicking "Show Notes" displays the stored notes in a smooth animated dropdown.
+6. A "Close Notes" button is provided to hide the notes with smooth animation.
+
+
+
+3. Notes Management:
+
+1. The NotesModal component provides options to update notes and rewrite with AI.
+2. The delete functionality can be added to the NotesModal component.

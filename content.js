@@ -1,6 +1,7 @@
 let folderData = []; // Array to store folder structure
 let checkBox = [];
 let bookmarks = []; // Array to store bookmarked chats
+let activeNotes = {};
 
 function saveChat(chat) {
   chrome.runtime.sendMessage({ action: "saveChat", chat }, (response) => {
@@ -1635,6 +1636,51 @@ function createFolderElement(folder, index, depth) {
 
   addContextMenu(folder, folderTitle, subfolderContainer, depth);
 
+  if (folder.type === "file") {
+    const notesContainer = document.createElement("div");
+    notesContainer.setAttribute("data-notes-container", folder.id);
+
+    notesContainer.style.cssText = `
+      display: none;
+      margin-top: 10px;
+      padding: 10px;
+      background: #1a1a1a;
+      border-radius: 5px;
+      transition: all 0.3s ease;
+    `;
+
+    const notesButton = document.createElement("button");
+    notesButton.innerHTML = "▼";
+    notesButton.title = "Show Notes";
+    notesButton.style.cssText = `
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      padding: 2px 5px;
+      margin-left: 5px;
+      font-size: 12px;
+      transition: transform 0.3s ease;
+    `;
+
+    let notesVisible = false;
+    notesButton.addEventListener("click", () => {
+      notesVisible = !notesVisible;
+      notesContainer.style.display = notesVisible ? "block" : "none";
+      notesButton.style.transform = notesVisible
+        ? "rotate(180deg)"
+        : "rotate(0)";
+      notesButton.title = notesVisible ? "Close Notes" : "Show Notes";
+
+      if (notesVisible) {
+        loadNotes(folder.id);
+      }
+    });
+
+    folderTitle.parentElement.appendChild(notesButton);
+    folderElement.appendChild(notesContainer);
+  }
+
   return folderElement;
 }
 
@@ -1653,6 +1699,7 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer;">✏️ Rename</button>
     <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer;">🤖 Rename with AI</button>
     <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer; color: #ff4d4d;">🗑️ Delete</button>
+    <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer; ">📒 Create Note</button>
   `;
   // Remove the "Add Folder" button if the item is a file
   if (folder.type === "file") {
@@ -1672,8 +1719,13 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     menu.style.display = "none";
   });
 
-  const [addSubfolderButton, renameButton, aiRenameButton, deleteFolderButton] =
-    menu.querySelectorAll(".contextOption");
+  const [
+    addSubfolderButton,
+    renameButton,
+    aiRenameButton,
+    deleteFolderButton,
+    createNoteButton,
+  ] = menu.querySelectorAll(".contextOption");
 
   // Add Subfolder
   addSubfolderButton.addEventListener("click", () => {
@@ -1714,6 +1766,11 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
       }
     });
   });
+
+  createNoteButton.onclick = () => {
+    // contextMenu.remove();
+    createNotesModal(folder.id);
+  };
 
   // Rename Folder/File
   renameButton.addEventListener("click", () => {
@@ -2696,4 +2753,439 @@ function removeItemFromFolder(folders, itemId) {
     }
   }
   return false;
+}
+
+function createNotesModal(chatId) {
+  const modal = document.createElement("div");
+  modal.className = "notes-modal";
+  modal.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #1a1a1a;
+    padding: 20px;
+    border-radius: 10px;
+    z-index: 10000;
+    width: 500px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    border: 1px solid #333;
+  `;
+
+  const header = document.createElement("div");
+  header.style.cssText = `
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+  `;
+
+  const title = document.createElement("h2");
+  title.textContent = "Create Note";
+  title.style.cssText = `
+    color: white;
+    margin: 0;
+    font-size: 1.5em;
+  `;
+
+  const closeBtn = document.createElement("button");
+  closeBtn.innerHTML = "×";
+  closeBtn.style.cssText = `
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  `;
+
+  const textarea = document.createElement("textarea");
+  textarea.style.cssText = `
+    width: 100%;
+    height: 200px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 5px;
+    padding: 10px;
+    color: white;
+    font-size: 14px;
+    resize: vertical;
+    margin-bottom: 15px;
+  `;
+
+  const saveBtn = document.createElement("button");
+  saveBtn.textContent = "Save Note";
+  saveBtn.style.cssText = `
+    background: #2196F3;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+  `;
+
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+  modal.appendChild(header);
+  modal.appendChild(textarea);
+  modal.appendChild(saveBtn);
+
+  closeBtn.onclick = () => modal.remove();
+  saveBtn.onclick = () => {
+    const noteText = textarea.value.trim();
+    if (noteText) {
+      saveNote(chatId, noteText);
+      modal.remove();
+    }
+  };
+
+  document.body.appendChild(modal);
+}
+
+function saveNote(chatId, content) {
+  chrome.storage.local.get(["user"], (result) => {
+    if (!result.user) {
+      console.warn("No user logged in.");
+      return;
+    }
+
+    const note = {
+      chat_id: chatId,
+      content: content,
+      user_id: result.user.id,
+    };
+
+    chrome.runtime.sendMessage({ action: "saveNote", note }, (response) => {
+      if (response.error) {
+        console.error("Error saving note:", response.error);
+      } else {
+        console.log("Note saved successfully:", response.data);
+        loadNotes(chatId); // Refresh notes display
+      }
+    });
+  });
+}
+
+function loadNotes(chatId) {
+  chrome.storage.local.get(["user"], (result) => {
+    if (!result.user) {
+      console.warn("No user logged in.");
+      return;
+    }
+
+    chrome.runtime.sendMessage(
+      {
+        action: "getNotes",
+        chatId: chatId,
+        userId: result.user.id,
+      },
+      (response) => {
+        if (response.error) {
+          console.error("Error loading notes:", response.error);
+        } else {
+          displayNotes(chatId, response.data);
+        }
+      }
+    );
+  });
+}
+
+function displayNotes(chatId, notes) {
+  const notesContainer = document.querySelector(
+    `[data-notes-container="${chatId}"]`
+  );
+  if (!notesContainer) return;
+
+  notesContainer.innerHTML = "";
+
+  notes.forEach((note) => {
+    const noteElement = document.createElement("div");
+    noteElement.className = "note-item";
+    noteElement.setAttribute("data-note-id", note.id);
+    noteElement.style.cssText = `
+      background: #2a2a2a;
+      padding: 10px;
+      margin-bottom: 8px;
+      border-radius: 5px;
+      position: relative;
+      animation: slideDown 0.3s ease;
+    `;
+
+    const noteContentWrapper = document.createElement("div");
+    noteContentWrapper.style.cssText = `
+      color: white;
+      margin: 0 0 5px 0;
+      font-size: 14px;
+      line-height: 1.5;
+    `;
+
+    const noteContent = document.createElement("span");
+    const showMoreSpan = document.createElement("span");
+    showMoreSpan.style.cssText = `
+      color: #2196F3;
+      cursor: pointer;
+      margin-left: 4px;
+      user-select: none;
+    `;
+
+    // Check if content needs show more button
+    const tempDiv = document.createElement("div");
+    tempDiv.style.cssText = `
+      position: absolute;
+      visibility: hidden;
+      height: auto;
+      width: ${noteElement.offsetWidth}px;
+      font-size: 14px;
+      line-height: 1.5;
+    `;
+    tempDiv.textContent = note.content;
+    document.body.appendChild(tempDiv);
+
+    const lineHeight = parseInt(getComputedStyle(tempDiv).lineHeight);
+    const maxHeight = lineHeight * 2;
+
+    if (tempDiv.offsetHeight > maxHeight) {
+      let expanded = false;
+      const words = note.content.split(" ");
+      const truncatedContent = words.slice(0, 15).join(" "); // Show first 15 words
+
+      function updateContent() {
+        if (expanded) {
+          noteContent.textContent = note.content;
+          showMoreSpan.textContent = " ...show less";
+        } else {
+          noteContent.textContent = truncatedContent;
+          showMoreSpan.textContent = " ...show more";
+        }
+      }
+
+      showMoreSpan.onclick = () => {
+        expanded = !expanded;
+        updateContent();
+      };
+
+      updateContent(); // Initial content
+    } else {
+      noteContent.textContent = note.content;
+      showMoreSpan.style.display = "none";
+    }
+
+    document.body.removeChild(tempDiv);
+
+    noteContentWrapper.appendChild(noteContent);
+    noteContentWrapper.appendChild(showMoreSpan);
+    noteElement.appendChild(noteContentWrapper);
+
+    const noteActions = document.createElement("div");
+    noteActions.style.cssText = `
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    `;
+
+    // Update button
+    const updateBtn = document.createElement("button");
+    updateBtn.textContent = "✏️ Edit";
+    updateBtn.onclick = () => updateNote(note.id, note.content);
+
+    // AI Rewrite button
+    const rewriteBtn = document.createElement("button");
+    rewriteBtn.textContent = "🤖 Rewrite";
+    rewriteBtn.onclick = () => rewriteWithAI(note.id, note.content);
+
+    // Delete button
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "🗑️ Delete";
+    deleteBtn.onclick = () => deleteNote(note.id);
+
+    [updateBtn, rewriteBtn, deleteBtn].forEach((btn) => {
+      btn.style.cssText = `
+        background: #333;
+        border: none;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 12px;
+      `;
+    });
+
+    noteActions.appendChild(updateBtn);
+    noteActions.appendChild(rewriteBtn);
+    noteActions.appendChild(deleteBtn);
+    noteElement.appendChild(noteActions);
+    notesContainer.appendChild(noteElement);
+  });
+
+  // Add styles for animation
+  const style = document.createElement("style");
+  style.textContent = `
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function updateNote(noteId, currentContent) {
+  const modal = document.createElement("div");
+  modal.className = "update-note-modal";
+  modal.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #1a1a1a;
+    padding: 20px;
+    border-radius: 10px;
+    z-index: 10000;
+    width: 500px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  `;
+
+  const textarea = document.createElement("textarea");
+  textarea.value = currentContent;
+  textarea.style.cssText = `
+    width: 100%;
+    height: 200px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 5px;
+    padding: 10px;
+    color: white;
+    font-size: 14px;
+    resize: vertical;
+    margin-bottom: 15px;
+  `;
+
+  const saveBtn = document.createElement("button");
+  saveBtn.textContent = "Save Changes";
+  saveBtn.style.cssText = `
+    background: #2196F3;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-right: 10px;
+  `;
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.style.cssText = `
+    background: #666;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+  `;
+
+  modal.appendChild(textarea);
+  modal.appendChild(saveBtn);
+  modal.appendChild(cancelBtn);
+
+  saveBtn.onclick = () => {
+    const newContent = textarea.value.trim();
+    if (newContent) {
+      chrome.runtime.sendMessage(
+        { action: "updateNote", noteId, content: newContent },
+        (response) => {
+          if (response.error) {
+            console.error("Error updating note:", response.error);
+          } else {
+            console.log("Note updated successfully:", response.data);
+            loadNotes(response.data.chat_id);
+          }
+        }
+      );
+      modal.remove();
+    }
+  };
+
+  cancelBtn.onclick = () => modal.remove();
+  document.body.appendChild(modal);
+}
+
+function rewriteWithAI(noteId, currentContent) {
+  // Get the note element
+  const noteElement = document.querySelector(`[data-note-id="${noteId}"]`);
+  if (!noteElement) return;
+
+   // Find the rewrite button
+   const rewriteBtn = Array.from(noteElement.querySelectorAll('button')).find(btn => btn.textContent.includes('🤖 Rewrite'));
+   if (!rewriteBtn) return;
+
+  // Create and add loader
+  const originalText = rewriteBtn.textContent;
+  const loader = document.createElement("span");
+  loader.className = "loader";
+  loader.style.cssText = `
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-left: 5px;
+    vertical-align: middle;
+  `;
+
+  // Add animation styles
+  const style = document.createElement("style");
+  style.textContent = `
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `;
+  document.head.appendChild(style);
+  // Disable button and show loader
+  rewriteBtn.disabled = true;
+  rewriteBtn.textContent = "🤖 Rewriting";
+  rewriteBtn.appendChild(loader);
+
+  const prompt = `Please rewrite and improve this note(only give the improved version in response no any thing else msg, symbol) while maintaining its core meaning: "${currentContent}"`;
+
+  chrome.runtime.sendMessage({ action: "askDeepSeek", prompt }, (response) => {
+    // Remove loader and restore button
+    if (loader && loader.parentNode) {
+      loader.parentNode.removeChild(loader);
+    }
+    rewriteBtn.disabled = false;
+    rewriteBtn.textContent = originalText;
+
+    if (response) {
+      chrome.runtime.sendMessage(
+        { action: "updateNote", noteId, content: response },
+        (updateResponse) => {
+          if (updateResponse.error) {
+            console.error("Error updating note:", updateResponse.error);
+          } else {
+            console.log("Note updated successfully:", updateResponse.data);
+            loadNotes(updateResponse.data.chat_id);
+          }
+        }
+      );
+    }
+  });
+}
+
+function deleteNote(noteId) {
+  if (confirm("Are you sure you want to delete this note?")) {
+    chrome.runtime.sendMessage({ action: "deleteNote", noteId }, (response) => {
+      if (response.error) {
+        console.error("Error deleting note:", response.error);
+      } else {
+        console.log("Note deleted successfully");
+        loadNotes(response.data.chat_id);
+      }
+    });
+  }
 }

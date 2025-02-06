@@ -7,18 +7,22 @@ const SUPABASE_ANON_KEY =
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function queryDeepSeek(prompt) {
-  const API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJwYXNwb2xhc3VtaXQyMDA0QGdtYWlsLmNvbSIsImlhdCI6MTczODU4MTk2NX0.pwfNy5jb35jmwsMicFOF-ZBxGqfeeTEAuTYrEl-UdNU"; // 🔹 Replace with your actual API Key
-  const response = await fetch("https://api.hyperbolic.xyz/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "deepseek-ai/DeepSeek-V3", // Adjust model name if needed
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
+  const API_KEY =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJwYXNwb2xhc3VtaXQyMDA0QGdtYWlsLmNvbSIsImlhdCI6MTczODU4MTk2NX0.pwfNy5jb35jmwsMicFOF-ZBxGqfeeTEAuTYrEl-UdNU"; // 🔹 Replace with your actual API Key
+  const response = await fetch(
+    "https://api.hyperbolic.xyz/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "deepseek-ai/DeepSeek-V3", // Adjust model name if needed
+        messages: [{ role: "user", content: prompt }],
+      }),
+    }
+  );
 
   const data = await response.json();
   return data?.choices?.[0]?.message?.content || "Error fetching response";
@@ -111,7 +115,7 @@ function sendMessageToContentScript(message) {
 
 // 🔹 Listen for real-time changes in folders, chats, bookmarks, and chats_folder
 function setupRealtimeListeners() {
-  const tables = ["folders", "chats", "bookmarks", "chats_folder"];
+  const tables = ["folders", "chats", "bookmarks", "chats_folder", "notes"];
 
   tables.forEach((table) => {
     supabase
@@ -448,6 +452,77 @@ async function deleteBookmarkFromSupabase(bookmarkId, user_id) {
   return { success: true };
 }
 
+async function saveNoteToSupabase(note) {
+  if (!note.user_id) {
+    console.error("Error: User ID is missing when saving the note!");
+    return { error: "User ID is required" };
+  }
+
+  const { data, error } = await supabase
+    .from("notes")
+    .insert([
+      {
+        chat_id: note.chat_id,
+        content: note.content,
+        user_id: note.user_id,
+      },
+    ])
+    .select("*");
+
+  if (error) {
+    console.error("Supabase Error (Save Note):", error);
+    return { error };
+  }
+
+  return { data: data[0] };
+}
+
+async function getNotesFromSupabase(chatId, userId) {
+  const { data, error } = await supabase
+    .from("notes")
+    .select("*")
+    .eq("chat_id", chatId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Supabase Error (Get Notes):", error);
+    return { error };
+  }
+
+  return { data };
+}
+
+async function updateNoteInSupabase(noteId, content) {
+  const { data, error } = await supabase
+    .from("notes")
+    .update({ content })
+    .eq("id", noteId)
+    .select("*");
+
+  if (error) {
+    console.error("Supabase Error (Update Note):", error);
+    return { error };
+  }
+
+  return { data: data[0] };
+}
+
+async function deleteNoteFromSupabase(noteId) {
+  const { data, error } = await supabase
+    .from("notes")
+    .delete()
+    .eq("id", noteId)
+    .select("*");
+
+  if (error) {
+    console.error("Supabase Error (Delete Note):", error);
+    return { error };
+  }
+
+  return { data: data[0] };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "saveBookmark") {
     saveBookmarkToSupabase(message.bookmark)
@@ -498,6 +573,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "deleteChat") {
     deleteChatFromSupabase(message.chatId, message.user_id)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.action === "saveNote") {
+    saveNoteToSupabase(message.note)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.action === "getNotes") {
+    getNotesFromSupabase(message.chatId, message.userId)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.action === "updateNote") {
+    updateNoteInSupabase(message.noteId, message.content)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.action === "deleteNote") {
+    deleteNoteFromSupabase(message.noteId)
       .then((response) => sendResponse(response))
       .catch((err) => sendResponse({ error: err.message }));
     return true;
