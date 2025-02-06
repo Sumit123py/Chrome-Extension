@@ -666,8 +666,6 @@ const observer4 = new MutationObserver((mutations, observerInstance) => {
 
     // Ensure the container has position: relative for absolute positioning
     widthContainer.style.position = "relative";
-    widthContainer.style.width = '400px'
-    widthContainer.firstChild.style.width = '400px'
 
     // Hide the scrollbars but keep scrolling functionality
     widthContainer.style.overflow = "auto";
@@ -1689,26 +1687,91 @@ function createFolderElement(folder, index, depth) {
 function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
   const menu = document.createElement("div");
   menu.style.cssText = `
-    position: absolute; background-color: #2a2a2a; color: white; border-radius: 8px;
-    display: none; flex-direction: column; gap: 8px; padding: 10px; z-index: 10000;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-    border: 1px solid #444;
-    font-family: Arial, sans-serif;
+  position: fixed;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 5px;
+  padding: 5px 0;
+  min-width: 150px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  z-index: 1000;
+  animation: fadeIn 0.1s ease;
+  flex-direction: column;
   `;
 
   menu.innerHTML = `
-    <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer;">➕ Add Folder</button>
-    <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer;">✏️ Rename</button>
-    <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer;">🤖 Rename with AI</button>
-    <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer; color: #ff4d4d;">🗑️ Delete</button>
-    <button class="contextOption" style="padding: 8px; background-color: #3a3a3a; border: none; border-radius: 4px; cursor: pointer; ">📒 Create Note</button>
+    <button class="contextOption" style="padding: 8px 12px;
+    cursor: pointer;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s ease;
+    font-size: 14px;">➕ Add Folder</button>
+    <button class="contextOption" style="padding: 8px 12px;
+    cursor: pointer;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s ease;
+    font-size: 14px;">✏️ Rename</button>
+    <button class="contextOption" style="padding: 8px 12px;
+    cursor: pointer;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s ease;
+    font-size: 14px;">🤖 Rename with AI</button>
+    <button class="contextOption" style="padding: 8px 12px;
+    cursor: pointer;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s ease;
+    font-size: 14px;">🗑️ Delete</button>
+    <button class="contextOption createNoteBtn" style="padding: 8px 12px;
+    cursor: pointer;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s ease;
+    font-size: 14px; ">📒 Create Note</button>
   `;
   // Remove the "Add Folder" button if the item is a file
   if (folder.type === "file") {
     menu.querySelector("button").style.display = "none"; // Hide "Add Folder"
   }
 
+  if (folder.type === "folder") {
+    menu.querySelector(".createNoteBtn").style.display = "none"; // Hide "Create Note" for folders
+  }
+
   document.body.appendChild(menu);
+
+  // Add animation styles
+  const style = document.createElement("style");
+  style.textContent = `
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Add mouse over and leave effects to context options
+  const contextOptions = document.querySelectorAll(".contextOption");
+  contextOptions.forEach((option) => {
+    option.addEventListener("mouseover", () => {
+      option.style.background = "#444";
+    });
+    option.addEventListener("mouseleave", () => {
+      option.style.background = "transparent";
+    });
+  });
 
   folderTitle.addEventListener("contextmenu", (event) => {
     event.preventDefault();
@@ -1771,7 +1834,7 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
 
   createNoteButton.onclick = () => {
     // contextMenu.remove();
-    createNotesModal(folder.id);
+    createNotesModal(folder.id, folder.link);
   };
 
   // Rename Folder/File
@@ -2757,7 +2820,7 @@ function removeItemFromFolder(folders, itemId) {
   return false;
 }
 
-function createNotesModal(chatId) {
+function createNotesModal(chatId, link) {
   const modal = document.createElement("div");
   modal.className = "notes-modal";
   modal.style.cssText = `
@@ -2838,7 +2901,7 @@ function createNotesModal(chatId) {
   saveBtn.onclick = () => {
     const noteText = textarea.value.trim();
     if (noteText) {
-      saveNote(chatId, noteText);
+      saveNote(chatId, noteText, link);
       modal.remove();
     }
   };
@@ -2846,7 +2909,7 @@ function createNotesModal(chatId) {
   document.body.appendChild(modal);
 }
 
-function saveNote(chatId, content) {
+function saveNote(chatId, content, link) {
   chrome.storage.local.get(["user"], (result) => {
     if (!result.user) {
       console.warn("No user logged in.");
@@ -2857,6 +2920,7 @@ function saveNote(chatId, content) {
       chat_id: chatId,
       content: content,
       user_id: result.user.id,
+      link: link,
     };
 
     chrome.runtime.sendMessage({ action: "saveNote", note }, (response) => {
@@ -2913,7 +2977,21 @@ function displayNotes(chatId, notes) {
       border-radius: 5px;
       position: relative;
       animation: slideDown 0.3s ease;
+      border: 1px solid #444;
+      transition: all 0.2s ease;
+      cursor: pointer;
     `;
+
+    // Add hover effect
+    noteElement.addEventListener("mouseover", () => {
+      noteElement.style.borderColor = "#666";
+      noteElement.style.transform = "translateY(-1px)";
+    });
+
+    noteElement.addEventListener("mouseleave", () => {
+      noteElement.style.borderColor = "#444";
+      noteElement.style.transform = "translateY(0)";
+    });
 
     const noteContentWrapper = document.createElement("div");
     noteContentWrapper.style.cssText = `
@@ -2921,6 +2999,7 @@ function displayNotes(chatId, notes) {
       margin: 0 0 5px 0;
       font-size: 14px;
       line-height: 1.5;
+      position: relative;
     `;
 
     const noteContent = document.createElement("span");
@@ -2931,6 +3010,12 @@ function displayNotes(chatId, notes) {
       margin-left: 4px;
       user-select: none;
     `;
+
+    // Context menu for right-click
+    noteElement.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      showNoteContextMenu(e, note);
+    });
 
     // Check if content needs show more button
     const tempDiv = document.createElement("div");
@@ -2951,7 +3036,7 @@ function displayNotes(chatId, notes) {
     if (tempDiv.offsetHeight > maxHeight) {
       let expanded = false;
       const words = note.content.split(" ");
-      const truncatedContent = words.slice(0, 15).join(" "); // Show first 15 words
+      const truncatedContent = words.slice(0, 15).join(" ");
 
       function updateContent() {
         if (expanded) {
@@ -2968,7 +3053,7 @@ function displayNotes(chatId, notes) {
         updateContent();
       };
 
-      updateContent(); // Initial content
+      updateContent();
     } else {
       noteContent.textContent = note.content;
       showMoreSpan.style.display = "none";
@@ -2980,52 +3065,105 @@ function displayNotes(chatId, notes) {
     noteContentWrapper.appendChild(showMoreSpan);
     noteElement.appendChild(noteContentWrapper);
 
-    const noteActions = document.createElement("div");
-    noteActions.style.cssText = `
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 8px;
-    `;
-
-    // Update button
-    const updateBtn = document.createElement("button");
-    updateBtn.textContent = "✏️ Edit";
-    updateBtn.onclick = () => updateNote(note.id, note.content);
-
-    // AI Rewrite button
-    const rewriteBtn = document.createElement("button");
-    rewriteBtn.textContent = "🤖 Rewrite";
-    rewriteBtn.onclick = () => rewriteWithAI(note.id, note.content);
-
-    // Delete button
-    const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "🗑️ Delete";
-    deleteBtn.onclick = () => deleteNote(note.id);
-
-    [updateBtn, rewriteBtn, deleteBtn].forEach((btn) => {
-      btn.style.cssText = `
-        background: #333;
-        border: none;
-        color: white;
-        padding: 4px 8px;
-        border-radius: 3px;
-        cursor: pointer;
-        font-size: 12px;
-      `;
-    });
-
-    noteActions.appendChild(updateBtn);
-    noteActions.appendChild(rewriteBtn);
-    noteActions.appendChild(deleteBtn);
-    noteElement.appendChild(noteActions);
     notesContainer.appendChild(noteElement);
   });
+}
 
-  // Add styles for animation
+// Add this new function for the context menu
+function showNoteContextMenu(event, note) {
+  // Remove any existing context menus
+  const existingMenu = document.querySelector(".note-context-menu");
+  if (existingMenu) {
+    existingMenu.remove();
+  }
+
+  const contextMenu = document.createElement("div");
+  contextMenu.className = "note-context-menu";
+  contextMenu.style.cssText = `
+    position: fixed;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 5px;
+    padding: 5px 0;
+    min-width: 150px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    z-index: 1000;
+    animation: fadeIn 0.1s ease;
+  `;
+
+  const menuItems = [
+    {
+      icon: "📋",
+      text: "Copy",
+      action: () => navigator.clipboard.writeText(note.content),
+    },
+    {
+      icon: "✏️",
+      text: "Edit",
+      action: () => updateNote(note.id, note.content),
+    },
+    {
+      icon: "🤖",
+      text: "Rewrite with AI",
+      action: () => rewriteWithAI(note.id, note.content),
+    },
+    {
+      icon: "⏰",
+      text: "Set Reminder",
+      action: () => createReminderModal(note.id, note.content, note.link),
+    },
+    { icon: "🗑️", text: "Delete", action: () => deleteNote(note.id) },
+  ];
+
+  menuItems.forEach((item) => {
+    const menuItem = document.createElement("div");
+    menuItem.style.cssText = `
+      padding: 8px 12px;
+      cursor: pointer;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s ease;
+      font-size: 14px;
+    `;
+
+    menuItem.innerHTML = `${item.icon} ${item.text}`;
+
+    menuItem.addEventListener("mouseover", () => {
+      menuItem.style.background = "#444";
+    });
+
+    menuItem.addEventListener("mouseleave", () => {
+      menuItem.style.background = "transparent";
+    });
+
+    menuItem.addEventListener("click", () => {
+      item.action();
+      contextMenu.remove();
+    });
+
+    contextMenu.appendChild(menuItem);
+  });
+
+  // Position the menu
+  contextMenu.style.left = `${event.pageX}px`;
+  contextMenu.style.top = `${event.pageY}px`;
+
+  // Add click outside listener
+  document.addEventListener("click", function closeMenu(e) {
+    if (!contextMenu.contains(e.target)) {
+      contextMenu.remove();
+      document.removeEventListener("click", closeMenu);
+    }
+  });
+
+  document.body.appendChild(contextMenu);
+
+  // Add animation styles
   const style = document.createElement("style");
   style.textContent = `
-    @keyframes slideDown {
+    @keyframes fadeIn {
       from { opacity: 0; transform: translateY(-10px); }
       to { opacity: 1; transform: translateY(0); }
     }
@@ -3120,9 +3258,11 @@ function rewriteWithAI(noteId, currentContent) {
   const noteElement = document.querySelector(`[data-note-id="${noteId}"]`);
   if (!noteElement) return;
 
-   // Find the rewrite button
-   const rewriteBtn = Array.from(noteElement.querySelectorAll('button')).find(btn => btn.textContent.includes('🤖 Rewrite'));
-   if (!rewriteBtn) return;
+  // Find the rewrite button
+  const rewriteBtn = Array.from(noteElement.querySelectorAll("button")).find(
+    (btn) => btn.textContent.includes("🤖 Rewrite")
+  );
+  if (!rewriteBtn) return;
 
   // Create and add loader
   const originalText = rewriteBtn.textContent;
@@ -3191,4 +3331,125 @@ function deleteNote(noteId) {
       }
     });
   }
+}
+
+function createReminderModal(noteId, noteContent, link) {
+  const modal = document.createElement("div");
+  modal.className = "reminder-modal";
+  modal.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #1a1a1a;
+    padding: 20px;
+    border-radius: 10px;
+    z-index: 10000;
+    width: 400px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    border: 1px solid #333;
+  `;
+
+  const header = document.createElement("div");
+  header.style.cssText = `
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+  `;
+
+  const title = document.createElement("h2");
+  title.textContent = "Set Reminder";
+  title.style.cssText = `
+    color: white;
+    margin: 0;
+    font-size: 1.5em;
+  `;
+
+  const closeBtn = document.createElement("button");
+  closeBtn.innerHTML = "×";
+  closeBtn.style.cssText = `
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  `;
+
+  const form = document.createElement("form");
+  form.style.cssText = `
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  `;
+
+  const dateTimeInput = document.createElement("input");
+  dateTimeInput.type = "datetime-local";
+  dateTimeInput.style.cssText = `
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 5px;
+    padding: 10px;
+    color: white;
+    font-size: 14px;
+  `;
+
+  const saveBtn = document.createElement("button");
+  saveBtn.textContent = "Set Reminder";
+  saveBtn.style.cssText = `
+    background: #2196F3;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+  `;
+
+  // Set minimum date to now
+  const now = new Date();
+  const tzoffset = now.getTimezoneOffset() * 60000;
+  const localISOTime = new Date(Date.now() - tzoffset)
+    .toISOString()
+    .slice(0, 16);
+  dateTimeInput.min = localISOTime;
+
+  form.appendChild(dateTimeInput);
+  form.appendChild(saveBtn);
+
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+  modal.appendChild(header);
+  modal.appendChild(form);
+
+  closeBtn.onclick = () => modal.remove();
+
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const reminderTime = new Date(dateTimeInput.value).getTime();
+
+    chrome.runtime.sendMessage(
+      {
+        action: "setReminder",
+        reminder: {
+          noteId,
+          noteContent,
+          reminderTime,
+          link,
+        },
+      },
+      (response) => {
+        if (response.error) {
+          console.error("Error setting reminder:", response.error);
+        } else {
+          console.log("Reminder set successfully:", response.data);
+          modal.remove();
+        }
+      }
+    );
+  };
+
+  document.body.appendChild(modal);
 }

@@ -3,7 +3,14 @@
   "name": "ChatGpt folder Extension",
   "version": "3.3",
   "description": "A simple extension to interact with webpages.",
-  "permissions": ["activeTab", "scripting", "tabs", "storage"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs",
+    "storage",
+    "notifications",
+    "alarms"
+  ],
   "host_permissions": [
     "<all_urls>",
     "https://iiokcprfxttdlszwhpma.supabase.co/*"

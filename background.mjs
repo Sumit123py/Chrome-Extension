@@ -28,6 +28,150 @@ async function queryDeepSeek(prompt) {
   return data?.choices?.[0]?.message?.content || "Error fetching response";
 }
 
+// Store for active reminders
+let activeReminders = new Map();
+
+// Function to set a reminder
+async function setReminderInSupabase(reminder) {
+  const { data, error } = await supabase
+    .from("reminders")
+    .insert([
+      {
+        note_id: reminder.noteId,
+        reminder_time: new Date(reminder.reminderTime).toISOString(),
+        note_content: reminder.noteContent,
+        status: "pending",
+        link: reminder.link,
+      },
+    ])
+    .select("*");
+
+  if (error) {
+    console.error("Supabase Error (Set Reminder):", error);
+    return { error };
+  }
+
+  // Schedule the reminder
+  scheduleReminder(data[0]);
+  return { data: data[0] };
+}
+
+// Function to schedule a reminder
+function scheduleReminder(reminder) {
+  const timeUntilReminder =
+    new Date(reminder.reminder_time).getTime() - Date.now();
+
+  if (timeUntilReminder <= 0) {
+    console.warn("Skipping past reminder:", reminder);
+    return;
+  }
+
+  // Create unique alarm name
+  const alarmName = `reminder-${reminder.id}`;
+
+  // Create alarm
+  chrome.alarms.create(alarmName, {
+    when: Date.now() + timeUntilReminder,
+  });
+
+  console.log(
+    `Alarm scheduled: ${alarmName} for ${new Date(
+      Date.now() + timeUntilReminder
+    ).toLocaleString()}`
+  );
+
+  // Store reminder data
+  activeReminders.set(reminder.id, reminder);
+}
+
+// Handle notification click
+chrome.notifications.onButtonClicked.addListener(
+  (notificationId, buttonIndex) => {
+    if (notificationId.startsWith("reminder-")) {
+      const reminderId = parseInt(notificationId.split("-")[1]);
+
+      // Find the note associated with this reminder
+      supabase
+        .from("reminders")
+        .select("*")
+        .eq("id", reminderId)
+        .single()
+        .then(({ data, error }) => {
+          console.log("da", data);
+          if (!error && data) {
+            // Open the chat with the note
+            chrome.tabs.create({
+              url: `${data.link}`,
+            });
+          }
+        });
+    }
+  }
+);
+
+// Function to show Chrome notification
+function showNotification(reminder) {
+  chrome.notifications.create(`reminder-${reminder.id}`, {
+    type: "basic",
+    iconUrl: chrome.runtime.getURL("./image/folders.png"), // Make sure this icon exists in your extension
+    title: "Note Reminder",
+    message: reminder.note_content,
+    priority: 2,
+    requireInteraction: true, // Notification will remain until user interacts
+    buttons: [{ title: "View Note" }],
+  });
+
+  // Update reminder status in Supabase
+  supabase
+    .from("reminders")
+    .update({ status: "completed" })
+    .eq("id", reminder.id)
+    .then(({ error }) => {
+      if (error) console.error("Error updating reminder status:", error);
+    });
+}
+
+// Handle alarm trigger
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name.startsWith("reminder-")) {
+    const reminderId = parseInt(alarm.name.split("-")[1]);
+    const reminder = activeReminders.get(reminderId);
+
+    if (reminder) {
+      showNotification(reminder);
+      activeReminders.delete(reminderId);
+    } else {
+      // Fallback: fetch reminder from Supabase if not in memory
+      const { data, error } = await supabase
+        .from("reminders")
+        .select("*")
+        .eq("id", reminderId)
+        .single();
+
+      if (!error && data) {
+        showNotification(data);
+      }
+    }
+  }
+});
+
+// Load active reminders when extension starts
+async function loadActiveReminders() {
+  const { data, error } = await supabase
+    .from("reminders")
+    .select("*")
+    .eq("status", "pending")
+    .gt("reminder_time", new Date().toISOString());
+
+  if (error) {
+    console.error("Error loading reminders:", error);
+    return;
+  }
+
+  console.log(`Loading ${data.length} active reminders`);
+  data.forEach(scheduleReminder);
+}
+
 // 🔹 Sign Up Function (Username & Password)
 async function signUpWithUsername(username, password) {
   // Check if username already exists
@@ -115,7 +259,14 @@ function sendMessageToContentScript(message) {
 
 // 🔹 Listen for real-time changes in folders, chats, bookmarks, and chats_folder
 function setupRealtimeListeners() {
-  const tables = ["folders", "chats", "bookmarks", "chats_folder", "notes"];
+  const tables = [
+    "folders",
+    "chats",
+    "bookmarks",
+    "chats_folder",
+    "notes",
+    "reminders",
+  ];
 
   tables.forEach((table) => {
     supabase
@@ -465,6 +616,7 @@ async function saveNoteToSupabase(note) {
         chat_id: note.chat_id,
         content: note.content,
         user_id: note.user_id,
+        link: note.link,
       },
     ])
     .select("*");
@@ -578,6 +730,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "setReminder") {
+    setReminderInSupabase(message.reminder)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
   if (message.action === "saveNote") {
     saveNoteToSupabase(message.note)
       .then((response) => sendResponse(response))
@@ -681,3 +840,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 chrome.runtime.onInstalled.addListener(() => {
   console.log("Extension installed! Testing Supabase...");
 });
+
+// Initialize reminders when extension starts
+loadActiveReminders();
