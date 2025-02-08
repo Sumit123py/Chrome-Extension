@@ -3258,14 +3258,7 @@ function rewriteWithAI(noteId, currentContent) {
   const noteElement = document.querySelector(`[data-note-id="${noteId}"]`);
   if (!noteElement) return;
 
-  // Find the rewrite button
-  const rewriteBtn = Array.from(noteElement.querySelectorAll("button")).find(
-    (btn) => btn.textContent.includes("🤖 Rewrite")
-  );
-  if (!rewriteBtn) return;
-
   // Create and add loader
-  const originalText = rewriteBtn.textContent;
   const loader = document.createElement("span");
   loader.className = "loader";
   loader.style.cssText = `
@@ -3290,9 +3283,8 @@ function rewriteWithAI(noteId, currentContent) {
   `;
   document.head.appendChild(style);
   // Disable button and show loader
-  rewriteBtn.disabled = true;
-  rewriteBtn.textContent = "🤖 Rewriting";
-  rewriteBtn.appendChild(loader);
+
+  noteElement.appendChild(loader);
 
   const prompt = `Please rewrite and improve this note(only give the improved version in response no any thing else msg, symbol) while maintaining its core meaning: "${currentContent}"`;
 
@@ -3301,15 +3293,13 @@ function rewriteWithAI(noteId, currentContent) {
     if (loader && loader.parentNode) {
       loader.parentNode.removeChild(loader);
     }
-    rewriteBtn.disabled = false;
-    rewriteBtn.textContent = originalText;
 
     if (response) {
       chrome.runtime.sendMessage(
         { action: "updateNote", noteId, content: response },
         (updateResponse) => {
           if (updateResponse.error) {
-            console.error("Error updating note:", updateResponse.error);
+            alert("Sorry! AI is sleeping.");
           } else {
             console.log("Note updated successfully:", updateResponse.data);
             loadNotes(updateResponse.data.chat_id);
