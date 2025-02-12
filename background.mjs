@@ -471,6 +471,22 @@ async function updateFolderParent(folderId, parentId, user_id) {
   }
 }
 
+async function updateFolderImage(imageUrl, folderId, user_id) {
+  const { data, error } = await supabase
+    .from("folders")
+    .update({ image: imageUrl })
+    .eq("id", folderId)
+    .eq("user_id", user_id);
+
+  if (error) {
+    console.error("Supabase Error (Update Folder Parent):", error);
+    return { error };
+  } else {
+    console.log("Updated folder parent in Supabase:", data);
+    return { data };
+  }
+}
+
 async function updateChatFolder(chatId, newFolderId, user_id) {
   if (!user_id) {
     console.error("Error: User ID is missing when saving the chat folder!");
@@ -758,6 +774,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+
   if (message.action === "deleteNote") {
     deleteNoteFromSupabase(message.noteId)
       .then((response) => sendResponse(response))
@@ -788,6 +805,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((err) => sendResponse({ error: err.message }));
     return true;
   }
+
+  if (message.action === "updateFolderImage") {
+    updateFolderImage(message.imageUrl, message.folderId, message.user_id)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
 
   if (message.action === "saveChat") {
     saveChatToSupabase(message.chat)

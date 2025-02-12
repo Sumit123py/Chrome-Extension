@@ -114,6 +114,1153 @@ function renameWithAI(title, id, type) {
   });
 }
 
+// Add this function to get AI-suggested color
+async function getAIColorSuggestion(folderTitle) {
+  const prompt = `Based on the folder name "${folderTitle}", suggest a color that would be semantically appropriate. Only respond with the hex color code, no other text. For example: #4B70F5`;
+
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      { action: "askDeepSeek", prompt },
+      (response) => {
+        // Clean up the response to ensure it's a valid hex color
+        const hexColor = response.match(/#[0-9A-Fa-f]{6}/)?.[0] || "#4B70F5";
+        resolve(hexColor);
+      }
+    );
+  });
+}
+
+// Add this function to generate AI colors
+async function generateAIColorPalette() {
+  const prompts = [
+    "Generate a vibrant, energetic color",
+    "Generate a calm, soothing color",
+    "Generate a professional, business-like color",
+    "Generate a creative, artistic color",
+    "Generate a nature-inspired color",
+    "Generate a modern, tech-inspired color",
+    "Generate a warm, inviting color",
+    "Generate a cool, refreshing color",
+    "Generate a luxurious, elegant color",
+    "Generate a playful, fun color",
+  ];
+
+  // Repeat prompts to get 50 colors (5 variations of each theme)
+  const allPrompts = Array(5).fill(prompts).flat();
+
+  return Promise.all(
+    allPrompts.map((prompt) => {
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage(
+          { action: "askDeepSeek", prompt },
+          (response) => {
+            const hexColor =
+              response.match(/#[0-9A-Fa-f]{6}/)?.[0] || generateRandomColor();
+            resolve(hexColor);
+          }
+        );
+      });
+    })
+  );
+}
+
+// Helper function to generate random color if AI fails
+function generateRandomColor() {
+  return (
+    "#" +
+    Math.floor(Math.random() * 16777215)
+      .toString(16)
+      .padStart(6, "0")
+  );
+}
+
+const defaultIcons = {
+  images: [
+    // URLs
+    "https://th.bing.com/th/id/OIP.pMZnhVPpiwBuK7h9eT-2qwHaHa?w=178&h=180&c=7&r=0&o=5&dpr=1.3&pid=1.7",
+    "https://avatars.githubusercontent.com/u/54469796?v=4",
+    "https://play-lh.googleusercontent.com/DYXNS7NyuIgbCk5ElbK2Ch7dNuUnnCJ2ToDsV0QK0Q-MiGWQR7oDl9w8VXGinA5ureA",
+    "https://stripe-camo.global.ssl.fastly.net/548134147663fc43c8748f38a79ccc6d4c805872186d84dcc4bda0f067ccc736/68747470733a2f2f66696c65732e7374726970652e636f6d2f6c696e6b732f4d44423859574e6a64463878536a56474e58464757485a4e52484a6a5356553566475a7358327870646d566659327852596b6f335a456c704d474659566b70305a31686e5646686e56584e4c3030764c613735314231",
+    "https://biz.prlog.org/decentplatform/logo.png",
+    "https://res.cloudinary.com/beincrypto/image/upload/v1658310711/logos/gwycfgcvp9x5kqzswdra.jpg",
+    "https://yt3.ggpht.com/a/AATXAJz5a1O8SpQqjM20Ikj1Uye99NyrrXj1WrRkfA=s900-c-k-c0xffffffff-no-rj-mo",
+    "https://th.bing.com/th/id/OIP.Ov5P7tFABDTM9_7Qtrw84AHaHa?w=1024&h=1024&rs=1&pid=ImgDetMain",
+
+
+
+    // Local paths (if you have local icons)
+    "./image/icons/1.png",
+    "./image/icons/2.ico",
+
+
+
+
+
+    // Emojis
+    "📁",
+    "📂",
+    "📚",
+    "🗂️",
+    "📌",
+    "📎",
+    "🔖",
+    "📋",
+    "📝",
+    "📑",
+    "💼",
+    "🗄️",
+    "🗃️",
+    "📒",
+    "📕",
+    "📗",
+    "📘",
+    "📙",
+    "🗂",
+    "🎭",
+    "📂", "📁", "↗️", "💀", "📒", "🌟", "⭐", "📄", "❤️", "💕", "🛠️", "💰", "👻", "✈️" , "🎬", "🤖", "💀", "👮‍♀️", "🕵️‍♂️",
+  "🏃‍♀️", "🚶‍♂️", "🚣‍♂️", "🏄‍♀️", "✌️", "✍️", "👪", "🧑‍🤝‍🧑", "🎈", "🎆", "🎇",  "🧨", "✨", "🎉", "🎊", "🎃", "🎄",
+  "🎋", "🎍", "🎎", "🎏", "🎐", "🎑", "🧧", "🎀", "🎁", "🎗️", "🎞️", "🎟️", "🎫", "🎠", "🛝", "🎡", "🎢", "🎪", "🎭",
+  "🖼️", "🎨", "🧵", "🪡", "🧶", "🪢", "🛒", "👓", "🕶️", "🦺", "🥽", "🥼", "🧥", "👔", "👕", "👖", "🩳", "🧣", "🧤",
+  "🧦", "👗", "🥻", "👘", "👚", "🩲", "🩱", "⛑️", "🎓", "⚾", "🥎", "🏀", "🏐", "🏈", "🏉", "⛳", "🥅", "🛷", "🎿",
+  "🏒", "🥍", "🏏", "🥉", "🥈", "🥇", "🏅", "🎖️", "🏆", "🎮", "🕹️", "🎯", "🎲", "♠️", "♣️", "♟️", "📢", "📣", "🎙️",
+  "🎤", "🔔", "🥁", "📯", "🎺", "🪗", "📻", "🧱", "🛖", "⚙️", "🪵", "🛢️", "🗜️", "⚗️", "🧪", "🧫", "🧬", "🩺", "🩻",
+  "💉", "🩸", "🩹", "🩼", "💊", "🔬", "🔭", "⚖️", "📿", "⛓️", "📿", "🔗", "🪝", "🧲", "📱", "🔫", "💣", "🫙", "📟",
+  "📞", "☎️", "🪃", "🗿", "🖨️", "💽", "💾", "💿", "📀", "📺", "🪔", "💡", "📹", "🗂️", "🗄️", "🍔", "🍟", "🌭", "🍕",
+  "🍿", "🧂", "🍖", "🥫", "🫔", "🍞", "🥗", "🥙", "🥪", "🌮", "🥩", "🍘", "🍙", "🍤", "🍣", "🍜", "🍛", "🍚", "🥣",
+  "🍩", "🍪", "🍬", "🍭", "🚗", "🚓", "🚕", "🛺", "🚙", "🛻", "🚌", "🚐", "🚎", "🚑", "🚒", "🚚", "🚛", "🚜", "🚘",
+  "🚔", "🚖", "🚍", "🦽", "🦼", "🛹", "🛼", "🚲", "🛴", "🏍️", "🛵", "🏎️", "🚄", "🚅", "🚈", "🚟", "✈️", "🪂",
+  "🛩️", "🛫", "🛬", "🛸", "🚀", "🚁", "⚓", "⛽", "🛞", "🏳️‍🌈", "🏁", "🚧", "🏳️", "🏴", "🏴‍☠️", "🚩", "🌌", "🪐",
+  "🌍", "🌎", "🌏", "🗺️", "🧭", "🏔️", "⛰️", "🏞️", "🏕️", "🛤️", "🗻", "🏜️", "🏝️", "🏟️", "🏛️", "🏗️", "🏠", "🏙️",
+  "🕌", "🛕", "🕍", "⛩️", "🏢", "🏣", "🕋", "🏪", "🏩", "🏤", "🏫", "🏬", "🏭", "🏯", "🏰", "💒", "🗾", "🌉",
+  "🗼", "⛺", "🌁", "🌃", "🌄", "♨️", "🌇", "🪞", "🛗", "🛎️", "💈", "🪠", "🧻", "🫧", "🧼", "🪤", "🧯", "🧷", "🌪️",
+  "🌗", "🌑", "🌝", "🌖", "🌕", "🌔", "🌓", "🌒", "🌞", "🌟", "⭐", "🌠", "☄️", "🌡️", "⛱️", "⚡", "🌈", "☃️", "⛄",
+  "🔥", "🌊", "💧", "💦", "💫", "💨", "☢️", "🔱", "⚜️", "♻️", "🌐", "❎", "✅", "0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣",
+  "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟", "🔢", "▶️", "⏸️", "⏹️", "⏺️", "↘️", "↗️", "➡️", "⬆️",
+    
+
+    
+  ],
+};
+
+// Add new function to handle text color picker
+// Update the showTextColorPicker function to ensure color persistence
+function showTextColorPicker(folder, folderTitle) {
+  const colorPicker = document.createElement("div");
+  colorPicker.style.cssText = `
+    position: absolute;
+    background: #2a2a2a;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid #444;
+    min-width: 200px;
+  `;
+
+  // Custom color input section
+  const customColorSection = document.createElement("div");
+  customColorSection.style.cssText = `
+    display: flex;
+    gap: 5px;
+    align-items: center;
+  `;
+
+  const customColorInput = document.createElement("input");
+  customColorInput.type = "color";
+  customColorInput.value = "#ffffff"; // Default to white
+  customColorInput.style.cssText = `
+    width: 50px;
+    height: 30px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  `;
+
+  const applyButton = document.createElement("button");
+  applyButton.textContent = "Apply Color";
+  applyButton.style.cssText = `
+    padding: 8px 12px;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    flex-grow: 1;
+  `;
+
+  customColorSection.appendChild(customColorInput);
+  customColorSection.appendChild(applyButton);
+  colorPicker.appendChild(customColorSection);
+
+  // Predefined colors
+  const predefinedColors = [
+    "#ffffff",
+    "#000000",
+    "#ff0000",
+    "#00ff00",
+    "#0000ff",
+    "#ffff00",
+    "#00ffff",
+    "#ff00ff",
+  ];
+  const predefinedColorsContainer = document.createElement("div");
+  predefinedColorsContainer.style.cssText = `
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+  `;
+
+  predefinedColors.forEach((color) => {
+    const colorOption = document.createElement("div");
+    colorOption.style.cssText = `
+      width: 25px;
+      height: 25px;
+      background-color: ${color};
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid #444;
+    `;
+
+    colorOption.addEventListener("click", () => {
+      // Apply and save the color
+      folderTitle.style.color = color;
+      chrome.storage.local.get(["folderTextColors"], (result) => {
+        const folderTextColors = result.folderTextColors || {};
+        folderTextColors[folder.id] = color;
+        chrome.storage.local.set({ folderTextColors }, () => {
+          console.log("Text color saved:", color, "for folder:", folder.id);
+        });
+      });
+      colorPicker.remove();
+    });
+
+    predefinedColorsContainer.appendChild(colorOption);
+  });
+
+  colorPicker.appendChild(predefinedColorsContainer);
+
+  applyButton.addEventListener("click", () => {
+    const color = customColorInput.value;
+    // Apply and save the color
+    folderTitle.style.color = color;
+    chrome.storage.local.get(["folderTextColors"], (result) => {
+      const folderTextColors = result.folderTextColors || {};
+      folderTextColors[folder.id] = color;
+      chrome.storage.local.set({ folderTextColors }, () => {
+        console.log("Text color saved:", color, "for folder:", folder.id);
+      });
+    });
+    colorPicker.remove();
+  });
+
+  // Position the color picker
+  const rect = folderTitle.getBoundingClientRect();
+  colorPicker.style.left = `${rect.right + 10}px`;
+  colorPicker.style.top = `${rect.top}px`;
+
+  document.body.appendChild(colorPicker);
+
+  // Close color picker when clicking outside
+  function handleClickOutside(e) {
+    if (!colorPicker.contains(e.target) && e.target !== folderTitle) {
+      colorPicker.remove();
+      document.removeEventListener("click", handleClickOutside);
+    }
+  }
+
+  // Delay adding the click listener to prevent immediate closing
+  requestAnimationFrame(() => {
+    document.addEventListener("click", handleClickOutside);
+  });
+}
+
+function showImagePicker(folder, folderTitle) {
+  const imagePicker = document.createElement("div");
+  imagePicker.style.cssText = `
+    position: absolute;
+    background: #2a2a2a;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid #444;
+    min-width: 300px;
+  `;
+
+  // Create tabs container
+  const tabsContainer = document.createElement("div");
+  tabsContainer.style.cssText = `
+    display: flex;
+    gap: 5px;
+    border-bottom: 1px solid #444;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+  `;
+
+  const tabs = ["User Added", "AI Generated", "Default"];
+  let activeTab = "Default";
+
+  // Create tab buttons
+  tabs.forEach((tabName) => {
+    const tab = document.createElement("button");
+    tab.textContent = tabName;
+    tab.style.cssText = `
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+      background: ${activeTab === tabName ? "#444" : "#333"};
+      color: white;
+    `;
+
+    tab.addEventListener("mouseover", () => {
+      if (activeTab !== tabName) {
+        tab.style.background = "#3a3a3a";
+      }
+    });
+
+    tab.addEventListener("mouseleave", () => {
+      if (activeTab !== tabName) {
+        tab.style.background = "#333";
+      }
+    });
+
+    tab.addEventListener("click", () => {
+      activeTab = tabName;
+      updateActiveTab();
+      showImages(tabName);
+    });
+
+    tabsContainer.appendChild(tab);
+  });
+
+  // Create image grid
+  const imageGrid = document.createElement("div");
+  imageGrid.style.cssText = `
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 5px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 5px;
+  `;
+
+  // Custom image input section
+  const customImageSection = document.createElement("div");
+  customImageSection.style.cssText = `
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    margin-top: 10px;
+  `;
+
+  const customImageInput = document.createElement("input");
+customImageInput.type = "file";
+customImageInput.accept = "image/*";
+customImageInput.style.cssText = `
+  width: 100px;
+  height: 30px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+`;
+
+const label = document.createElement("label");
+label.textContent = "Upload Images";
+label.style.cssText = `
+  display: inline-block;
+  width: 130px;
+  height: 35px;
+  text-align: center;
+  line-height: 35px;
+  background: #007bff;
+  color: white;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap
+`;
+label.appendChild(customImageInput);
+customImageInput.style.display = "none";
+
+// Event listener to update label text when a file is selected
+customImageInput.addEventListener("change", function () {
+  if (customImageInput.files.length > 0) {
+    label.textContent = "Selected";
+  } else {
+    label.textContent = "Upload Images";
+  }
+});
+  
+
+  const addToMyImagesBtn = document.createElement("button");
+  addToMyImagesBtn.textContent = "Add to My Images";
+  addToMyImagesBtn.style.cssText = `
+    padding: 8px 12px;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    flex-grow: 1;
+  `;
+
+  customImageSection.appendChild(label);
+  customImageSection.appendChild(addToMyImagesBtn);
+
+  // Add components to image picker
+  imagePicker.appendChild(tabsContainer);
+  imagePicker.appendChild(imageGrid);
+  imagePicker.appendChild(customImageSection);
+  document.body.appendChild(imagePicker);
+
+  // Function to update active tab styling
+  function updateActiveTab() {
+    Array.from(tabsContainer.children).forEach((tab) => {
+      tab.style.background = tab.textContent === activeTab ? "#444" : "#333";
+    });
+  }
+
+  // Function to create image option
+  function createImageOption(imageUrl) {
+    const imageOption = document.createElement("img");
+    imageOption.src = imageUrl;
+    imageOption.className = "imageOption";
+    imageOption.style.cssText = `
+      width: 40px;
+      height: 40px;
+      object-fit: cover;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid #444;
+      transition: transform 0.2s;
+    `;
+
+    const renderImage = document.createElement("img");
+    renderImage.src = imageUrl;
+    renderImage.className = "renderedImage";
+    renderImage.style.cssText = `
+      width: 20px;
+      height: 20px;
+      object-fit: cover;
+      border-radius: 4px;
+      transition: transform 0.2s;
+    `;
+
+    imageOption.addEventListener("mouseover", () => {
+      imageOption.style.transform = "scale(0.9)";
+      imageOption.style.border = "1px solid white";
+    });
+
+    imageOption.addEventListener("mouseleave", () => {
+      imageOption.style.transform = "scale(1)";
+      imageOption.style.border = "none";
+    });
+
+    imageOption.addEventListener("click", () => {
+      // Remove existing image if there is one
+      const existingImage =
+        folderTitle.querySelector(".renderedImage");
+      if (existingImage) {
+        existingImage.remove();
+      }
+
+      chrome.storage.local.get(["user"], (result) => {
+        if (!result.user) {
+          console.warn("No user logged in.");
+          return;
+        }
+
+        const user_id = result?.user?.id;
+
+        chrome.runtime.sendMessage(
+          {
+            action: "updateFolderImage",
+            imageUrl: imageUrl,
+            folderId: folder.id,
+            user_id: user_id,
+          },
+          (response) => {
+            if (response.error) {
+              console.error(
+                "Error updating folder parent:",
+                response.error
+              );
+            } else {
+              console.log(
+                "Folder parent updated in Supabase:",
+                response.data
+              );
+            }
+          }
+        );
+
+      })
+
+      // Insert new image before text inside folderTitle
+      folderTitle.innerHTML = ""; // Clear existing content
+      folderTitle.appendChild(renderImage);
+      folderTitle.appendChild(document.createTextNode(` ${folder.title.replace("📁", "")}`));
+
+      imagePicker.remove();
+
+      // Save the custom image to storage
+      chrome.storage.local.get(["folderImages"], (result) => {
+        const folderImages = result.folderImages || {};
+        folderImages[folder.id] = imageUrl;
+        chrome.storage.local.set({ folderImages });
+      });
+
+      imagePicker.remove();
+    });
+
+    return imageOption;
+  }
+
+  // Modify the showImages function to include AI-generated images
+  function showImages(tabName) {
+    imageGrid.innerHTML = "";
+
+    if (tabName === "AI Generated") {
+      // Create generate button container
+      const generateContainer = document.createElement("div");
+      generateContainer.style.cssText = `
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: center;
+        margin-bottom: 10px;
+      `;
+
+      const generateButton = document.createElement("button");
+      generateButton.textContent = "Generate AI Icons";
+      generateButton.style.cssText = `
+        padding: 8px 16px;
+        background: #2196F3;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        transition: all 0.2s;
+      `;
+
+      generateButton.addEventListener("click", async () => {
+        generateButton.disabled = true;
+        generateButton.style.opacity = "0.7";
+
+        const prompt = `Generate an icon or emoji that represents: ${folder.title}. Only respond with either a URL to an icon or an emoji character. No other text.`;
+
+        try {
+          const response = await new Promise((resolve) => {
+            chrome.runtime.sendMessage(
+              { action: "askDeepSeek", prompt },
+              resolve
+            );
+          });
+
+          // Check if response is an emoji or URL
+          const isEmoji = /\p{Emoji}/u.test(response);
+          const isUrl = response.startsWith("http");
+
+          if (isEmoji || isUrl) {
+            chrome.storage.local.get(["aiImages"], (result) => {
+              const aiImages = new Set(result.aiImages || []);
+              aiImages.add(response);
+              chrome.storage.local.set(
+                { aiImages: Array.from(aiImages) },
+                () => {
+                  showImages("AI Generated");
+                }
+              );
+            });
+          }
+        } catch (error) {
+          console.error("Error generating AI icon:", error);
+        } finally {
+          generateButton.disabled = false;
+          generateButton.style.opacity = "1";
+        }
+      });
+
+      generateContainer.appendChild(generateButton);
+      imageGrid.appendChild(generateContainer);
+    }
+
+    chrome.storage.local.get(["userImages", "aiImages"], (result) => {
+      const userImages = result.userImages || [];
+      const aiImages = result.aiImages || [];
+
+      let images = [];
+
+      switch (tabName) {
+        case "User Added":
+          images = userImages;
+          break;
+        case "AI Generated":
+          images = aiImages;
+          break;
+        case "Default":
+          images = defaultIcons.images;
+          break;
+      }
+
+      images.forEach((imageUrl) => {
+        const isUrl = /^(https?:\/\/|data:image)/.test(imageUrl); // Checks if imageUrl is a valid URL
+        const isEmoji = !isUrl && /^[\p{Emoji}]+$/u.test(imageUrl); // Ensures the string is purely an emoji
+
+        if (isEmoji) {
+          // Create emoji option
+          const emojiOption = document.createElement("div");
+          emojiOption.style.cssText = `
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            border-radius: 8px;
+            border: 1px solid #444;
+            transition: transform 0.2s;
+          `;
+          emojiOption.textContent = imageUrl;
+
+          emojiOption.addEventListener("mouseover", () => {
+            emojiOption.style.transform = "scale(0.9)";
+            emojiOption.style.border = "1px solid white";
+          });
+      
+          emojiOption.addEventListener("mouseleave", () => {
+            emojiOption.style.transform = "scale(1)";
+            emojiOption.style.border = "none";
+          });
+
+          emojiOption.addEventListener("click", () => {
+            folderTitle.textContent = `${imageUrl} ${folder.title.replace(
+              "📁",
+              ""
+            )}`;
+
+            chrome.storage.local.get(["user"], (result) => {
+              if (!result.user) {
+                console.warn("No user logged in.");
+                return;
+              }
+
+              const user_id = result?.user?.id;
+
+              chrome.runtime.sendMessage(
+                {
+                  action: "updateFolderImage",
+                  imageUrl: imageUrl,
+                  folderId: folder.id,
+                  user_id: user_id,
+                },
+                (response) => {
+                  if (response.error) {
+                    console.error(
+                      "Error updating folder parent:",
+                      response.error
+                    );
+                  } else {
+                    console.log(
+                      "Folder parent updated in Supabase:",
+                      response.data
+                    );
+                  }
+                }
+              );
+
+            })
+
+            imagePicker.remove();
+          });
+
+          imageGrid.appendChild(emojiOption);
+        } else if (isUrl) {
+          // Create image option for URLs and local paths
+          const imageOption = createImageOption(imageUrl);
+          imageGrid.appendChild(imageOption);
+        }
+      });
+
+      if (images.length === 0 && tabName !== "AI Generated") {
+        const message = document.createElement("div");
+        message.style.cssText = `
+          grid-column: 1 / -1;
+          text-align: center;
+          color: #888;
+          padding: 20px;
+          font-size: 12px;
+        `;
+        message.textContent = `No ${tabName.toLowerCase()} icons yet`;
+        imageGrid.appendChild(message);
+      }
+    });
+  }
+
+  
+
+  // Add image to user's collection
+  addToMyImagesBtn.addEventListener("click", () => {
+    const newImage = customImageInput.files[0];
+
+    if (newImage) {
+      const reader = new FileReader();
+      reader.onload = function () {
+        const imageUrl = reader.result;
+
+        chrome.storage.local.get(["userImages"], (result) => {
+          const userImages = result.userImages || [];
+          if (!userImages.includes(imageUrl)) {
+            userImages.push(imageUrl);
+            chrome.storage.local.set({ userImages }, () => {
+              if (activeTab === "User Added") {
+                showImages("User Added");
+              }
+            });
+          }
+        });
+
+        const renderImage = document.createElement("img");
+        renderImage.src = imageUrl;
+        renderImage.className = "renderedImage";
+        renderImage.style.cssText = `
+          width: 20px;
+          height: 20px;
+          object-fit: cover;
+          border-radius: 4px;
+          transition: transform 0.2s;
+        `;
+
+        
+
+        chrome.storage.local.get(["user"], (result) => {
+          if (!result.user) {
+            console.warn("No user logged in.");
+            return;
+          }
+  
+          const user_id = result?.user?.id;
+  
+          chrome.runtime.sendMessage(
+            {
+              action: "updateFolderImage",
+              imageUrl: imageUrl,
+              folderId: folder.id,
+              user_id: user_id,
+            },
+            (response) => {
+              if (response.error) {
+                console.error(
+                  "Error updating folder parent:",
+                  response.error
+                );
+              } else {
+                console.log(
+                  "Folder parent updated in Supabase:",
+                  response.data
+                );
+              }
+            }
+          );
+  
+        })
+  
+        // Insert new image before text inside folderTitle
+        folderTitle.innerHTML = ""; // Clear existing content
+        folderTitle.appendChild(renderImage);
+        folderTitle.appendChild(document.createTextNode(` ${folder.title.replace("📁", "")}`));
+       
+
+        // Save the custom image to storage
+        chrome.storage.local.get(["folderImages"], (result) => {
+          const folderImages = result.folderImages || {};
+          folderImages[folder.id] = imageUrl;
+          chrome.storage.local.set({ folderImages });
+        });
+
+        imagePicker.remove();
+      };
+
+      reader.readAsDataURL(newImage);
+    }
+  });
+
+  // Position the image picker
+  const rect = folderTitle.getBoundingClientRect();
+  imagePicker.style.left = `${rect.right + 10}px`;
+  imagePicker.style.top = `${rect.top}px`;
+
+  // Improved click outside handling
+  function handleClickOutside(e) {
+    if (!imagePicker.contains(e.target) && e.target !== folderTitle) {
+      imagePicker.remove();
+      document.removeEventListener("click", handleClickOutside);
+    }
+  }
+
+  // Delay adding the click listener to prevent immediate closing
+  requestAnimationFrame(() => {
+    document.addEventListener("click", handleClickOutside);
+  });
+
+  // Show default images initially
+  showImages("Default");
+}
+
+// Add this function after the colorGenerator function
+function showColorPicker(folder, folderTitle) {
+  const colorPicker = document.createElement("div");
+  colorPicker.style.cssText = `
+    position: absolute;
+    background: #2a2a2a;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid #444;
+    min-width: 300px;
+  `;
+
+  // Create tabs container
+  const tabsContainer = document.createElement("div");
+  tabsContainer.style.cssText = `
+    display: flex;
+    gap: 5px;
+    border-bottom: 1px solid #444;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+  `;
+
+  const tabs = ["User Added", "AI Added", "Default"];
+  let activeTab = "Default";
+
+  // Create tab buttons
+  tabs.forEach((tabName) => {
+    const tab = document.createElement("button");
+    tab.textContent = tabName;
+    tab.style.cssText = `
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+      background: ${activeTab === tabName ? "#444" : "#333"};
+      color: white;
+    `;
+
+    tab.addEventListener("mouseover", () => {
+      if (activeTab !== tabName) {
+        tab.style.background = "#3a3a3a";
+      }
+    });
+
+    tab.addEventListener("mouseleave", () => {
+      if (activeTab !== tabName) {
+        tab.style.background = "#333";
+      }
+    });
+
+    tab.addEventListener("click", () => {
+      activeTab = tabName;
+      updateActiveTab();
+      showColors(tabName);
+    });
+
+    tabsContainer.appendChild(tab);
+  });
+
+  // Create color grid
+  const colorGrid = document.createElement("div");
+  colorGrid.style.cssText = `
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 5px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 5px;
+  `;
+
+  // Custom color input section
+  const customColorSection = document.createElement("div");
+  customColorSection.style.cssText = `
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    margin-top: 10px;
+  `;
+
+  const customColorInput = document.createElement("input");
+  customColorInput.type = "color";
+  customColorInput.style.cssText = `
+    width: 50px;
+    height: 30px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  `;
+
+  const addToMyColorsBtn = document.createElement("button");
+  addToMyColorsBtn.textContent = "Add to My Colors";
+  addToMyColorsBtn.style.cssText = `
+    padding: 8px 12px;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    flex-grow: 1;
+  `;
+
+  customColorSection.appendChild(customColorInput);
+  customColorSection.appendChild(addToMyColorsBtn);
+
+  // Add components to color picker
+  colorPicker.appendChild(tabsContainer);
+  colorPicker.appendChild(colorGrid);
+  colorPicker.appendChild(customColorSection);
+  document.body.appendChild(colorPicker);
+
+  // Function to update active tab styling
+  function updateActiveTab() {
+    Array.from(tabsContainer.children).forEach((tab) => {
+      tab.style.background = tab.textContent === activeTab ? "#444" : "#333";
+    });
+  }
+
+  // Function to create color option
+  function createColorOption(color) {
+    const colorOption = document.createElement("div");
+    colorOption.style.cssText = `
+      width: 25px;
+      height: 25px;
+      background-color: ${color};
+      border-radius: 50%;
+      cursor: pointer;
+      border: 1px solid #444;
+      transition: transform 0.2s;
+    `;
+
+    colorOption.addEventListener("mouseover", () => {
+      colorOption.style.transform = "scale(1.1)";
+      colorOption.style.border = "1px solid white";
+    });
+
+    colorOption.addEventListener("mouseleave", () => {
+      colorOption.style.transform = "scale(1)";
+      colorOption.style.border = "none";
+    });
+
+    colorOption.addEventListener("click", () => {
+      folderTitle.style.backgroundColor = color;
+      folderTitle.style.color = isColorDark(color) ? "white" : "black";
+
+      // Save the custom color to storage
+      chrome.storage.local.get(["folderColors"], (result) => {
+        const folderColors = result.folderColors || {};
+        folderColors[folder.id] = color;
+        chrome.storage.local.set({ folderColors });
+      });
+
+      colorPicker.remove();
+    });
+
+    return colorOption;
+  }
+
+  // Modify the showColors function to include AI color generation
+  function showColors(tabName) {
+    colorGrid.innerHTML = "";
+
+    if (tabName === "AI Added") {
+      // Create generate button container
+      const generateContainer = document.createElement("div");
+      generateContainer.style.cssText = `
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: center;
+      margin-bottom: 10px;
+    `;
+
+      const generateButton = document.createElement("button");
+      generateButton.textContent = "Generate AI Colors";
+      generateButton.style.cssText = `
+      padding: 8px 16px;
+      background: #2196F3;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    `;
+
+      generateButton.addEventListener("mouseover", () => {
+        generateButton.style.background = "#1976D2";
+      });
+
+      generateButton.addEventListener("mouseleave", () => {
+        generateButton.style.background = "#2196F3";
+      });
+
+      // Loading spinner
+      const loadingSpinner = document.createElement("div");
+      loadingSpinner.style.cssText = `
+      width: 20px;
+      height: 20px;
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #2196F3;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-left: 10px;
+      display: none;
+    `;
+
+      // Add animation keyframes
+      const style = document.createElement("style");
+      style.textContent = `
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `;
+      document.head.appendChild(style);
+
+      generateButton.addEventListener("click", async () => {
+        generateButton.disabled = true;
+        generateButton.style.opacity = "0.7";
+        loadingSpinner.style.display = "block";
+
+        try {
+          const newColors = await generateAIColorPalette();
+
+          // Save new colors
+          chrome.storage.local.get(["aiColors"], (result) => {
+            const aiColors = new Set(result.aiColors || []);
+            newColors.forEach((color) => aiColors.add(color));
+            chrome.storage.local.set({ aiColors: Array.from(aiColors) }, () => {
+              showColors("AI Added"); // Refresh the display
+            });
+          });
+        } catch (error) {
+          console.error("Error generating AI colors:", error);
+        } finally {
+          generateButton.disabled = false;
+          generateButton.style.opacity = "1";
+          loadingSpinner.style.display = "none";
+        }
+      });
+
+      generateContainer.appendChild(generateButton);
+      generateContainer.appendChild(loadingSpinner);
+      colorGrid.appendChild(generateContainer);
+    }
+
+    chrome.storage.local.get(["userColors", "aiColors"], (result) => {
+      const userColors = result.userColors || [];
+      const aiColors = result.aiColors || [];
+
+      let colors = [];
+
+      switch (tabName) {
+        case "User Added":
+          colors = userColors;
+          break;
+        case "AI Added":
+          colors = aiColors;
+          break;
+        case "Default":
+          colors = Object.values(colorPalette).flat();
+          break;
+      }
+
+      colors.forEach((color) => {
+        colorGrid.appendChild(createColorOption(color));
+      });
+
+      // Show message if no colors and not in AI tab (since it has the generate button)
+      if (colors.length === 0 && tabName !== "AI Added") {
+        const message = document.createElement("div");
+        message.style.cssText = `
+        grid-column: 1 / -1;
+        text-align: center;
+        color: #888;
+        padding: 20px;
+        font-size: 12px;
+      `;
+        message.textContent = `No ${tabName.toLowerCase()} colors yet`;
+        colorGrid.appendChild(message);
+      }
+    });
+  }
+
+  // Add color to user's collection
+  addToMyColorsBtn.addEventListener("click", () => {
+    const newColor = customColorInput.value;
+
+    chrome.storage.local.get(["userColors"], (result) => {
+      const userColors = result.userColors || [];
+      if (!userColors.includes(newColor)) {
+        userColors.push(newColor);
+        chrome.storage.local.set({ userColors }, () => {
+          if (activeTab === "User Added") {
+            showColors("User Added");
+          }
+        });
+      }
+    });
+
+    folderTitle.style.backgroundColor = newColor;
+    folderTitle.style.color = isColorDark(newColor) ? "white" : "black";
+
+    // Save the custom color to storage
+    chrome.storage.local.get(["folderColors"], (result) => {
+      const folderColors = result.folderColors || {};
+      folderColors[folder.id] = newColor;
+      chrome.storage.local.set({ folderColors });
+    });
+
+    colorPicker.remove();
+  });
+
+  // Position the color picker
+  const rect = folderTitle.getBoundingClientRect();
+  colorPicker.style.left = `${rect.right + 10}px`;
+  colorPicker.style.top = `${rect.top}px`;
+
+  // Close color picker when clicking outside
+  function handleClickOutside(e) {
+    if (!colorPicker.contains(e.target) && e.target !== folderTitle) {
+      colorPicker.remove();
+      document.removeEventListener("click", handleClickOutside);
+    }
+  }
+
+  // Delay adding the click listener to prevent immediate closing
+  requestAnimationFrame(() => {
+    document.addEventListener("click", handleClickOutside);
+  });
+
+  // Show default colors initially
+  showColors("Default");
+}
+
 function deleteFolder(folderId, user_id) {
   chrome.runtime.sendMessage(
     { action: "deleteFolder", folderId: folderId, user_id: user_id },
@@ -451,6 +1598,7 @@ function fetchData(retryCount = 0, updateType, updatedItem) {
         title: folder?.title || "Untitled Folder",
         type: "folder",
         parent_id: folder?.parent_id || null,
+        image: folder.image,
         children: [],
       }));
 
@@ -983,13 +2131,23 @@ function generateRandomId() {
   return Math.floor(Math.random() * 1000000);
 }
 
-// Function to calculate the brightness of a color (to check if it's dark or light)
+// Update the isColorDark function to handle invalid inputs better
 function isColorDark(rgb) {
   if (!rgb) {
     console.error("Invalid RGB value:", rgb);
-    return false; // Default to false if value is null
+    return false;
   }
 
+  // Handle hex colors
+  if (rgb.startsWith("#")) {
+    const r = parseInt(rgb.slice(1, 3), 16);
+    const g = parseInt(rgb.slice(3, 5), 16);
+    const b = parseInt(rgb.slice(5, 7), 16);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness < 128;
+  }
+
+  // Handle rgb/rgba colors
   const match = rgb.match(/\d+/g);
   if (!match) {
     console.error("Invalid RGB format:", rgb);
@@ -997,7 +2155,7 @@ function isColorDark(rgb) {
   }
 
   const [r, g, b] = match.map(Number);
-  const brightness = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
   return brightness < 128;
 }
 
@@ -1014,6 +2172,36 @@ const observer = new MutationObserver((mutations, observerInstance) => {
 
 // Observe changes in the DOM to locate the target element
 observer.observe(document.body, { childList: true, subtree: true });
+
+let debounceTimer;
+
+const observer8 = new MutationObserver((mutations) => {
+  clearTimeout(debounceTimer); // Clear the previous debounce timer
+
+  debounceTimer = setTimeout(() => {
+    // Set a new debounce timer
+    mutations.forEach((mutation) => {
+      if (mutation.type === "childList") {
+        document.querySelectorAll(".folder-title").forEach((folderTitle) => {
+          const folderId = parseInt(folderTitle.dataset.id, 10);
+          chrome.storage.local.get(["folderTextColors"], (result) => {
+            const folderTextColors = result.folderTextColors || {};
+            const storedColor = folderTextColors[folderId];
+
+            // Only apply the color if it's different from the current color
+            if (storedColor && folderTitle.style.color !== storedColor) {
+              folderTitle.style.color = storedColor;
+              console.log("✅");
+            }
+          });
+        });
+      }
+    });
+  }, 1000); // Wait for 300ms after the last mutation to apply the color
+});
+
+// Observe changes in the document body (or more specifically, a narrower scope if needed)
+observer8.observe(document.body, { childList: true, subtree: true });
 
 function createUI(targetElement) {
   const container = document.createElement("div");
@@ -1116,23 +2304,53 @@ function createFolderElement(folder, index, depth) {
   const backgroundColor = colorGenerator(folder.title);
 
   const folderTitle = document.createElement("p");
-  folderTitle.textContent = folder.title;
+  folderTitle.className = "folder-title";
+  
   folderTitle.id = "aiLoaderContainer";
   folderTitle.style.cssText = `
   background-color: ${folder.type === "folder" ? backgroundColor : "black"};
-  padding: 5px; border-radius: 5px; color: ${
-    folder.type === "folder"
-      ? isColorDark(backgroundColor)
-        ? "white"
-        : "black"
-      : "white"
-  }; cursor: pointer;
+  padding: 5px; border-radius: 5px; cursor: pointer;
   margin-top: 10px; font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   `;
+
+  console.log('fol', folder)
+
+  const isUrl = /^(https?:\/\/|data:image)/.test(folder.image); // Checks if imageUrl is a valid URL
+  const isEmoji = !isUrl && /^[\p{Emoji}]+$/u.test(folder.image);
+
+  if(folder?.image && folder?.type === 'folder'){
+    if(isEmoji){
+      folderTitle.textContent = `${folder.image} ${folder.title.replace(
+        "📁",
+        ""
+      )}`;
+    } else if(isUrl){
+      const renderImage = document.createElement("img");
+      renderImage.src = folder.image;
+      renderImage.className = "renderedImage";
+      renderImage.style.cssText = `
+        width: 20px;
+        height: 20px;
+        object-fit: cover;
+        border-radius: 4px;
+        transition: transform 0.2s;
+      `;
+  
+      folderTitle.appendChild(renderImage);
+      folderTitle.appendChild(document.createTextNode(` ${folder.title.replace("📁", "")}`));
+  
+    }
+  }
+  else {
+    folderTitle.textContent = folder.title;
+  }
 
   folderTitle.addEventListener("click", () => {
     if (folder.type === "file") window.location.href = folder.link;
@@ -1156,6 +2374,16 @@ function createFolderElement(folder, index, depth) {
     }
     return null;
   }
+
+  chrome.storage.local.get(["folderColors"], (result) => {
+    const folderColors = result.folderColors || {};
+    const savedColor = folderColors[folder.id];
+
+    if (savedColor) {
+      folderTitle.style.backgroundColor = savedColor;
+      folderTitle.style.color = isColorDark(savedColor) ? "white" : "black";
+    }
+  });
 
   if (folder.type === "file" || folder.type === "folder") {
     folderTitle.draggable = true;
@@ -1274,6 +2502,7 @@ function createFolderElement(folder, index, depth) {
 
             // // Save and re-render
             // chrome.storage.local.set({ folderData: folderData });
+
             renderFolders(folderData, document.querySelector(".folders"));
           }
         });
@@ -1629,9 +2858,11 @@ function createFolderElement(folder, index, depth) {
   folderTitle.addEventListener("click", () => {
     isExpanded = !isExpanded;
     subfolderContainer.style.display = isExpanded ? "flex" : "none";
-    folderTitle.textContent = isExpanded
+    if(!folder.image){
+      folderTitle.textContent = isExpanded
       ? folder.title.replace("📁", "📂")
       : folder.title.replace("📂", "📁");
+    }
   });
 
   addContextMenu(folder, folderTitle, subfolderContainer, depth);
@@ -1708,6 +2939,7 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     gap: 8px;
     transition: background 0.2s ease;
     font-size: 14px;">➕ Add Folder</button>
+
     <button class="contextOption" style="padding: 8px 12px;
     cursor: pointer;
     color: white;
@@ -1716,6 +2948,7 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     gap: 8px;
     transition: background 0.2s ease;
     font-size: 14px;">✏️ Rename</button>
+
     <button class="contextOption" style="padding: 8px 12px;
     cursor: pointer;
     color: white;
@@ -1724,6 +2957,7 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     gap: 8px;
     transition: background 0.2s ease;
     font-size: 14px;">🤖 Rename with AI</button>
+
     <button class="contextOption" style="padding: 8px 12px;
     cursor: pointer;
     color: white;
@@ -1732,6 +2966,7 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     gap: 8px;
     transition: background 0.2s ease;
     font-size: 14px;">🗑️ Delete</button>
+
     <button class="contextOption createNoteBtn" style="padding: 8px 12px;
     cursor: pointer;
     color: white;
@@ -1740,14 +2975,64 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     gap: 8px;
     transition: background 0.2s ease;
     font-size: 14px; ">📒 Create Note</button>
+
+    <button class="contextOption changeColor" style="padding: 8px 12px;
+    cursor: pointer;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s ease;
+    font-size: 14px; ">🎨 Change Color</button>
+
+    <button class="contextOption changeTextColor" style="padding: 8px 12px;
+    cursor: pointer;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s ease;
+    font-size: 14px; ">🎨 Change Text Color</button>
+
+    <button class="contextOption aiColor" style="padding: 8px 12px;
+    cursor: pointer;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s ease;
+    font-size: 14px; ">🤖 Change Color with AI</button>
+
+    <button class="contextOption changeIcon" style="padding: 8px 12px;
+    cursor: pointer;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s ease;
+    font-size: 14px; ">🎭 Change Icon</button>
+
+    <button class="contextOption newTab" style="padding: 8px 12px;
+    cursor: pointer;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s ease;
+    font-size: 14px; ">↗️ Open chat in new tab</button>
   `;
   // Remove the "Add Folder" button if the item is a file
   if (folder.type === "file") {
     menu.querySelector("button").style.display = "none"; // Hide "Add Folder"
+    menu.querySelector(".changeColor").style.display = "none"; // Hide "Create Note" for folders
+    menu.querySelector(".aiColor").style.display = "none"; // Hide "Create Note" for folders
+    menu.querySelector(".changeTextColor").style.display = "none"; // Hide "Change Text Color"
+    menu.querySelector(".changeIcon").style.display = "none"; // Hide "Change Text Color"
   }
 
   if (folder.type === "folder") {
     menu.querySelector(".createNoteBtn").style.display = "none"; // Hide "Create Note" for folders
+    menu.querySelector(".newTab").style.display = "none"; // Hide "Create Note" for folders
   }
 
   document.body.appendChild(menu);
@@ -1790,6 +3075,11 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
     aiRenameButton,
     deleteFolderButton,
     createNoteButton,
+    changeColorButton,
+    changeTextColorButton,
+    aiColorButton,
+    changeIconButton,
+    newTabButton,
   ] = menu.querySelectorAll(".contextOption");
 
   // Add Subfolder
@@ -1835,6 +3125,38 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
   createNoteButton.onclick = () => {
     // contextMenu.remove();
     createNotesModal(folder.id, folder.link);
+  };
+
+  changeTextColorButton.onclick = () => {
+    showTextColorPicker(folder, folderTitle);
+  };
+
+  changeIconButton.onclick = () => {
+    showImagePicker(folder, folderTitle);
+  };
+
+  newTabButton.onclick = () => {
+    window.open(folder.link, "_blank").focus();
+  };
+
+  changeColorButton.onclick = () => {
+    showColorPicker(folder, folderTitle);
+    console.log("cliked");
+  };
+
+  aiColorButton.onclick = async () => {
+    const aiColor = await getAIColorSuggestion(folder.title);
+    folderTitle.style.backgroundColor = aiColor;
+    folderTitle.style.color = isColorDark(aiColor) ? "white" : "black";
+
+    // Save the AI-suggested color
+    chrome.storage.local.get(["folderColors"], (result) => {
+      const folderColors = result.folderColors || {};
+      folderColors[folder.id] = aiColor;
+      chrome.storage.local.set({ folderColors });
+    });
+
+    console.log("clik");
   };
 
   // Rename Folder/File
