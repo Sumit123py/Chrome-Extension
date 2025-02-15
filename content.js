@@ -2441,7 +2441,7 @@ function createFolderElement(folder, index, depth) {
 
           const user_id = result?.user?.id;
 
-          if (draggedItem.type === "file" || draggedItem.type === "folder") {
+          if (draggedItem.type === "file") {
             // Find the dragged folder or file and preserve its children if it's a folder
             const draggedItemData = findItemById(folderData, draggedItem.id);
 
