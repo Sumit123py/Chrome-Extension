@@ -3365,6 +3365,7 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
   flex-direction: column;
   `;
 
+
   menu.innerHTML = `
     <button class="contextOption" style="padding: 8px 12px;
     cursor: pointer;
@@ -3495,8 +3496,23 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
 
   folderTitle.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-    menu.style.top = `${event.clientY}px`;
-    menu.style.left = `${event.clientX}px`;
+    const screenWidth = window.innerWidth;
+  const screenHeight = window.innerHeight;
+  const menuWidth = 150; 
+  const menuHeight = 300; 
+  let left = event.clientX;
+  let top = event.clientY;
+
+  // Adjust the position to prevent overflow
+  if (left + menuWidth > screenWidth) {
+    left = screenWidth - menuWidth;
+  }
+  if (top + menuHeight > screenHeight) {
+    top = screenHeight - menuHeight;
+  }
+
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
     menu.style.display = "flex";
   });
 
@@ -4911,9 +4927,25 @@ function showNoteContextMenu(event, note) {
     contextMenu.appendChild(menuItem);
   });
 
+  // Calculate the position of the context menu
+  const screenWidth = window.innerWidth;
+  const screenHeight = window.innerHeight;
+  const menuWidth = 150; 
+  const menuHeight = 300; 
+  let left = event.clientX;
+  let top = event.clientY;
+
+  // Adjust the position to prevent overflow
+  if (left + menuWidth > screenWidth) {
+    left = screenWidth - menuWidth;
+  }
+  if (top + menuHeight > screenHeight) {
+    top = screenHeight - menuHeight;
+  }
+
   // Position the menu
-  contextMenu.style.left = `${event.pageX}px`;
-  contextMenu.style.top = `${event.pageY}px`;
+  contextMenu.style.left = `${left}px`;
+  contextMenu.style.top = `${top}px`;
 
   // Add click outside listener
   document.addEventListener("click", function closeMenu(e) {
