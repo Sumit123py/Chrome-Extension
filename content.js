@@ -327,15 +327,36 @@ function showTextColorPicker(folder, folderTitle) {
 
     colorOption.addEventListener("click", () => {
       // Apply and save the color
-      folderTitle.style.color = color;
-      chrome.storage.local.get(["folderTextColors"], (result) => {
-        const folderTextColors = result.folderTextColors || {};
-        folderTextColors[folder.id] = color;
-        chrome.storage.local.set({ folderTextColors }, () => {
-          console.log("Text color saved:", color, "for folder:", folder.id);
-        });
-      });
-      colorPicker.remove();
+    folderTitle.style.color = color;
+    const textColor = color;
+    
+    chrome.storage.local.get(["user"], (result) => {
+      if (!result.user) {
+        console.warn("No user logged in.");
+        return;
+      }
+
+      const user_id = result.user.id;
+
+      // Save colors to Supabase
+      chrome.runtime.sendMessage(
+        {
+          action: "updateTextColors",
+          folderId: folder.id,
+          color: textColor,
+          user_id: user_id
+        },
+        (response) => {
+          if (response.error) {
+            console.error("Error updating folder colors:", response.error);
+          } else {
+            console.log("Folder colors updated in Supabase:", response.data);
+          }
+        }
+      );
+    });
+
+    colorPicker.remove();
     });
 
     predefinedColorsContainer.appendChild(colorOption);
@@ -1068,16 +1089,39 @@ function showColorPicker(folder, folderTitle) {
     });
 
     colorOption.addEventListener("click", () => {
-      folderTitle.style.backgroundColor = color;
-      folderTitle.style.color = isColorDark(color) ? "white" : "black";
-
-      // Save the custom color to storage
-      chrome.storage.local.get(["folderColors"], (result) => {
-        const folderColors = result.folderColors || {};
-        folderColors[folder.id] = color;
-        chrome.storage.local.set({ folderColors });
+      const backgroundColor = color;
+      const textColor = isColorDark(color) ? "white" : "black";
+      
+      folderTitle.style.backgroundColor = backgroundColor;
+      folderTitle.style.color = textColor;
+  
+      chrome.storage.local.get(["user"], (result) => {
+        if (!result.user) {
+          console.warn("No user logged in.");
+          return;
+        }
+  
+        const user_id = result.user.id;
+  
+        // Save colors to Supabase
+        chrome.runtime.sendMessage(
+          {
+            action: "updateFolderColors",
+            folderId: folder.id,
+            bgColor: backgroundColor,
+            color: textColor,
+            user_id: user_id
+          },
+          (response) => {
+            if (response.error) {
+              console.error("Error updating folder colors:", response.error);
+            } else {
+              console.log("Folder colors updated in Supabase:", response.data);
+            }
+          }
+        );
       });
-
+  
       colorPicker.remove();
     });
 
@@ -1600,6 +1644,8 @@ function fetchData(retryCount = 0, updateType, updatedItem) {
         parent_id: folder?.parent_id || null,
         image: folder.image,
         children: [],
+        backgroundColor: folder.backgroundColor,
+        textColor: folder.textColor
       }));
 
       // 🔹 Convert list into a nested structure
@@ -2203,47 +2249,443 @@ const observer8 = new MutationObserver((mutations) => {
 // Observe changes in the document body (or more specifically, a narrower scope if needed)
 observer8.observe(document.body, { childList: true, subtree: true });
 
-function createUI(targetElement) {
-  const container = document.createElement("div");
-  container.style.cssText = `
-    padding: 15px;
-    margin: 10px 0;
-    background-color: black;
-    border-radius: 8px;
-    color: #ffffff;
-    font-weight: normal;
-    border: 1px solid black;
-  `;
 
-  container.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: 10px;">
-      <div>
-        <p>Bookmarks</p>
-        <div class="bookmarks-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+const guideModal = document.createElement("div");
+guideModal.style.cssText = `
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  background-color: #1a1a1a; padding: 25px; border-radius: 12px; z-index: 10000; 
+  display: none; width: 90%; max-width: fit-content; max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1);
+  font-family: 'Inter', 'Segoe UI', sans-serif; 
+  color: #e1e1e1;
+`;
+
+// Add custom styles
+const style = document.createElement('style');
+style.textContent = `
+  .guide-accordion {
+    background-color: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 8px;
+    cursor: pointer;
+    padding: 16px;
+    width: 100%;
+    text-align: left;
+    outline: none;
+    transition: 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #e1e1e1;
+    font-weight: 600;
+  }
+  
+  .guide-accordion:hover {
+    background-color: #333;
+  }
+  
+  .guide-accordion:after {
+    content: '+';
+    font-size: 22px;
+    font-weight: 300;
+    color: #ccc;
+    margin-left: 10px;
+  }
+  
+  .guide-accordion.active:after {
+    content: '−';
+  }
+  
+  .guide-panel {
+    padding: 0 18px;
+    background-color: #1a1a1a;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+    margin-top: 2px;
+    margin-bottom: 10px;
+    border-radius: 0 0 8px 8px;
+  }
+  
+  .guide-step-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: #673AB7;
+    border-radius: 50%;
+    margin-right: 15px;
+    flex-shrink: 0;
+  }
+  
+  .guide-step-content {
+    padding: 18px 10px;
+    line-height: 1.5;
+  }
+  
+  .guide-step-content em {
+    display: block;
+    margin-top: 8px;
+    color: #a09fff;
+    font-style: italic;
+    font-size: 0.95em;
+  }
+  
+  .guide-step-content ul {
+    list-style-type: decimal;
+    padding-left: 20px;
+    margin: 12px 0;
+  }
+  
+  .guide-step-content li {
+    margin-bottom: 8px;
+  }
+  
+  .guide-step-content .warning {
+    background-color: rgba(255, 193, 7, 0.1);
+    border-left: 3px solid #ffc107;
+    padding: 10px 15px;
+    margin: 12px 0;
+    font-size: 0.95em;
+  }
+  
+  .close-btn {
+    padding: 10px 20px;
+    font-size: 15px;
+    background-color: #673AB7;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    margin-top: 20px;
+  }
+  
+  .close-btn:hover {
+    background-color: #7e57c2;
+  }
+  
+  .guide-footer {
+    text-align: center;
+    color: #aaa;
+    font-size: 14px;
+    margin-top: 20px;
+  }
+`;
+document.head.appendChild(style);
+
+guideModal.innerHTML = `
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <h2 style="text-align: center; color: #e1e1e1; font-size: 24px; margin-bottom: 10px;">
+      Welcome, Champion! 🚀
+    </h2>
+    <p id="guide-intro" style="text-align: center; color: #ccc; font-size: 16px; line-height: 1.5; margin-bottom: 20px;">
+      You've installed the extension that will transform your experience. Let's explore your new powers:
+    </p>
+    
+    <div id="guide-steps">
+      <button class="guide-accordion">
+        <span class="guide-step-icon">👤</span>
+        <span>Log In / Sign Up</span>
+      </button>
+      <div class="guide-panel">
+        <div class="guide-step-content">
+          Secure your identity and join the elite circle.
+          <em>If you're already logged in, your credentials prove you're a seasoned warrior—stride into step 2!</em>
+        </div>
       </div>
-      <div style="position: relative;">
-        <p>Folders</p>
-        <button 
-          id="addFolder"
-          style="padding: 5px; font-size: 14px; background-color: black; width: 100%; color: white;  border: 1px solid #444; border-radius: 5px;"
-        >
-          📁 New Folder
-        </button>
+
+      <button class="guide-accordion">
+        <span class="guide-step-icon">📁</span>
+        <span>Organize Chats</span>
+      </button>
+      <div class="guide-panel">
+        <div class="guide-step-content">
+          Arrange your chats like a general planning a campaign.
+          <em>If you haven't started, create your first chat; if you have, you're already strategizing like a pro!</em>
+          
+          <ul>
+            <li>Hover over the chats left sidebar</li>
+            <li>You will see an Add button</li>
+            <li>Click on it and a modal box will appear</li>
+            <li>Select folder in which you want to keep the chat</li>
+            <li>Click on save. Done! It's easy</li>
+          </ul>
+          
+          <div class="warning">
+            <strong>⚠️ Important:</strong> If you have not created a folder, first create a folder then come back to this step.
+          </div>
+        </div>
+      </div>
+
+      <button class="guide-accordion">
+        <span class="guide-step-icon">🔖</span>
+        <span>Bookmark Key Insights</span>
+      </button>
+      <div class="guide-panel">
+        <div class="guide-step-content">
+          Capture those golden nuggets of wisdom that light your path.
+          <em>If your bookmarks are already shining, your archive of insights is proof you're ahead of the game!</em>
+        </div>
+      </div>
+
+      <button class="guide-accordion">
+        <span class="guide-step-icon">🖌️</span>
+        <span>Customize Folders</span>
+      </button>
+      <div class="guide-panel">
+        <div class="guide-step-content">
+          Personalize your workspace with style—make every folder your signature.
+          <em>If your folders are already set, your creative flair speaks volumes. On to the next challenge!</em>
+        </div>
+      </div>
+
+      <button class="guide-accordion">
+        <span class="guide-step-icon">⏰</span>
+        <span>Set Reminders</span>
+      </button>
+      <div class="guide-panel">
+        <div class="guide-step-content">
+          Schedule your moments of brilliance—time is your ally.
+          <em>If reminders are in place, you're managing your time like a true legend. Charge ahead!</em>
+          
+          <ul>
+            <li>First add Notes in any chats in folders</li>
+            <li>Now right click on notes and click on "Set Reminder"</li>
+            <li>Now set the date and time</li>
+            <li>Make sure you choose a date and time when you'll be using your browser</li>
+          </ul>
+          
+          <div class="warning">
+            <strong>Note:</strong> Reminders will only appear when you're using the browser.
+          </div>
+        </div>
+      </div>
+
+      <button class="guide-accordion">
+        <span class="guide-step-icon">🤖</span>
+        <span>AI Assistance</span>
+      </button>
+      <div class="guide-panel">
+        <div class="guide-step-content">
+          Harness the power of AI for razor-sharp insights and unstoppable efficiency.
+          <em>If you're already tapping into AI, welcome to the inner circle of innovators!</em>
+        </div>
+      </div>
+    </div>
+
+    <p class="guide-footer">
+      Encounter a glitch? Keep cool 😎 – Shoot us an email or leave a review. We're here to fuel your ascent!
+    </p>
+    
+    <div style="display: flex; justify-content: center; padding: 10px;">
+      <button id="close-guide-btn" class="close-btn">Got It!</button>
+    </div>
+  </div>
+`;
+document.body.appendChild(guideModal);
+
+// Add single accordion functionality
+const accordions = document.querySelectorAll(".guide-accordion");
+accordions.forEach(accordion => {
+  accordion.addEventListener("click", function() {
+    // Close all other accordions
+    accordions.forEach(item => {
+      if (item !== this && item.classList.contains("active")) {
+        item.classList.remove("active");
+        item.nextElementSibling.style.maxHeight = null;
+      }
+    });
+    
+    // Toggle current accordion
+    this.classList.toggle("active");
+    const panel = this.nextElementSibling;
+    
+    if (panel.style.maxHeight) {
+      panel.style.maxHeight = null;
+    } else {
+      panel.style.maxHeight = panel.scrollHeight + "px";
+    }
+  });
+});
+
+// Close button functionality
+document.getElementById("close-guide-btn").addEventListener("click", function() {
+  guideModal.style.display = "none";
+});
+
+// Function to show the modal
+function showGuideModal() {
+  guideModal.style.display = "flex";
+  
+  // Open first accordion by default
+  if (accordions.length > 0) {
+    accordions[0].click();
+  }
+}
+
+
+
+function createUI(targetElement) {
+  // Add custom CSS
+  const style = document.createElement('style');
+  style.textContent = `
+    .custom-sidebar {
+      padding: 20px;
+      margin: 15px 0;
+      background-color: #121212;
+      border-radius: 12px;
+      color: #e1e1e1;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .section-header {
+      font-size: 15px;
+      font-weight: 600;
+      color: #a8a8a8;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .section-header:before {
+      content: '';
+      height: 1px;
+      background-color: rgba(255,255,255,0.1);
+      flex-grow: 0;
+      width: 0;
+      margin-right: 0;
+      transition: width 0.3s, margin 0.3s;
+    }
+    
+    .section-header:after {
+      content: '';
+      height: 1px;
+      background-color: rgba(255,255,255,0.1);
+      flex-grow: 1;
+      margin-left: 6px;
+    }
+    
+    .custom-button {
+      padding: 8px 12px;
+      font-size: 14px;
+      background-color: #2a2a2a;
+      color: #e1e1e1;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .custom-button:hover {
+      background-color: #333;
+    }
+    
+    .custom-button:active {
+      transform: translateY(1px);
+    }
+    
+    .accent-button {
+      background-color: #673AB7;
+      color: white;
+    }
+    
+    .accent-button:hover {
+      background-color: #7e57c2;
+    }
+    
+    .custom-input {
+      padding: 8px 12px;
+      font-size: 14px;
+      background-color: #1e1e1e;
+      color: #e1e1e1;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      width: 100%;
+      transition: border-color 0.2s;
+    }
+    
+    .custom-input:focus {
+      outline: none;
+      border-color: #673AB7;
+    }
+    
+    .custom-input::placeholder {
+      color: #888;
+    }
+    
+    .folders-container {
+      margin-top: 12px;
+      overflow-y: auto;
+      max-height: 300px;
+    }
+    
+    .bookmarks-list {
+      margin-top: 8px;
+      overflow-y: auto;
+      max-height: 200px;
+    }
+  `;
+  document.head.appendChild(style);
+
+  const container = document.createElement("div");
+  container.className = "custom-sidebar";
+  
+  container.innerHTML = `
+    <div id="main-container" style="display: flex; flex-direction: column; gap: 18px;">
+      <button id="openGuide" class="custom-button accent-button">
+        <span style="font-size: 18px;">📕</span> User Guide
+      </button>
+      
+      <div>
+        <div class="section-header">
+          <span style="font-size: 16px;">🔖</span> Bookmarks
+        </div>
+        <div class="bookmarks-list" style="display: flex; flex-direction: column; gap: 8px; alignItems: center;"></div>
+      </div>
+      
+      <div>
+        <div class="section-header">
+          <span style="font-size: 16px;">📁</span> Folders
+        </div>
+        
         <input 
           type="text" 
           id="folderSearch"
           placeholder="Search folders and chats..."
-          style="margin-top: 10px; padding: 5px; font-size: 14px; background-color: black; width: 100%; color: white; border: 1px solid #444; border-radius: 5px;"
+          class="custom-input"
         >
-        <div class="folders" style="display: flex; flex-direction: column; margin-top: 10px;"></div>
+        
+        <button id="addFolder" class="custom-button" style="margin-top: 12px;">
+          <span style="font-size: 14px;">➕</span> New Folder
+        </button>
+        
+        <div class="folders folders-container"></div>
       </div>
     </div>
   `;
 
   targetElement.insertAdjacentElement("afterend", container);
 
-  setupFolderUI(container.querySelector(".folders")); // Initialize folder system
-  setupAddFolderButton(container.querySelector("#addFolder")); // Handle "Add Folder" button
+  // Initialize components
+  setupFolderUI(container.querySelector(".folders"));
+  setupAddFolderButton(container.querySelector("#addFolder"));
+  
+  // Attach event for guide button
+  container.querySelector("#openGuide").addEventListener("click", function() {
+    if (typeof showGuideModal === 'function') {
+      showGuideModal();
+    } else {
+      console.warn("Guide modal function not found");
+    }
+  });
 }
 
 function renderFolders(folderArray, container, depth = 0) {
@@ -2320,8 +2762,6 @@ function createFolderElement(folder, index, depth) {
   gap: 5px;
   `;
 
-  console.log('fol', folder)
-
   const isUrl = /^(https?:\/\/|data:image)/.test(folder.image); // Checks if imageUrl is a valid URL
   const isEmoji = !isUrl && /^[\p{Emoji}]+$/u.test(folder.image);
 
@@ -2375,15 +2815,10 @@ function createFolderElement(folder, index, depth) {
     return null;
   }
 
-  chrome.storage.local.get(["folderColors"], (result) => {
-    const folderColors = result.folderColors || {};
-    const savedColor = folderColors[folder.id];
-
-    if (savedColor) {
-      folderTitle.style.backgroundColor = savedColor;
-      folderTitle.style.color = isColorDark(savedColor) ? "white" : "black";
+    if (folder?.backgroundColor && folder?.textColor) {
+      folderTitle.style.backgroundColor = folder?.backgroundColor;
+      folderTitle.style.color = folder?.textColor;
     }
-  });
 
   if (folder.type === "file" || folder.type === "folder") {
     folderTitle.draggable = true;
@@ -3098,24 +3533,26 @@ function addContextMenu(folder, folderTitle, subfolderContainer, depth) {
       const user_id = result?.user?.id;
 
       const name = prompt("Enter subfolder name:");
-      if (name) {
+      const gener = colorGenerator(name)
+      if (name && gener) {
         const newFolder = {
           title: `📁${name}`,
           type: "folder",
           children: null,
           parent_id: parseInt(sessionStorage.getItem("folderId")),
           user_id: user_id,
+          bgColor: gener
         };
 
         // Save to Supabase
         saveFolder(newFolder);
 
-        folder.children.push({
-          id: generateRandomId(),
-          title: `📁${name}`,
-          type: "folder",
-          children: [],
-        });
+        // folder.children.push({
+        //   id: generateRandomId(),
+        //   title: `📁${name}`,
+        //   type: "folder",
+        //   children: [],
+        // });
         renderFolders(folderData, document.querySelector(".folders"));
         console.log("arr", folderData);
       }
@@ -3271,6 +3708,9 @@ function setupAddFolderButton(button) {
         return;
       }
       const name = input.value.trim();
+      const gener = colorGenerator(name)
+
+      console.log('h', gener)
       if (name) {
         const user_id = result?.user?.id;
         const newFolder = {
@@ -3278,7 +3718,10 @@ function setupAddFolderButton(button) {
           type: "folder",
           children: null,
           user_id: user_id,
+          bgColor: gener
         };
+
+        console.log('new', newFolder)
 
         // Save to Supabase
         saveFolder(newFolder);
@@ -4082,7 +4525,7 @@ function updateBookmarksDisplay() {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 8px;
+      padding: 2px;
       background-color: #2a2a2a;
       border-radius: 4px;
       color: white;

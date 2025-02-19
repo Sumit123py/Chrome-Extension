@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatGpt folder Extension",
-  "version": "3.10",
+  "version": "3.11",
   "description": "A simple extension to interact with webpages.",
   "permissions": [
     "activeTab",

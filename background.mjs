@@ -366,6 +366,8 @@ async function saveFolderToSupabase(folder) {
     return { error: "User ID is required" };
   }
 
+  console.log('foji', folder)
+
   const { data, error } = await supabase
     .from("folders")
     .insert([
@@ -373,9 +375,10 @@ async function saveFolderToSupabase(folder) {
         title: folder?.title,
         parent_id: folder?.parent_id,
         user_id: folder?.user_id, // ✅ Ensure user_id is correctly inserted
+        backgroundColor: folder?.bgColor
       },
     ])
-    .select("id, title, parent_id, user_id"); // ✅ Fetch user_id as well
+    .select("id, title, parent_id, user_id, backgroundColor"); // ✅ Fetch user_id as well
 
   if (error) {
     console.error("Supabase Error (Insert Folder):", error);
@@ -475,6 +478,38 @@ async function updateFolderImage(imageUrl, folderId, user_id) {
   const { data, error } = await supabase
     .from("folders")
     .update({ image: imageUrl })
+    .eq("id", folderId)
+    .eq("user_id", user_id);
+
+  if (error) {
+    console.error("Supabase Error (Update Folder Parent):", error);
+    return { error };
+  } else {
+    console.log("Updated folder parent in Supabase:", data);
+    return { data };
+  }
+}
+
+async function updateFolderColors(bgColor, color, folderId, user_id) {
+  const { data, error } = await supabase
+    .from("folders")
+    .update({ backgroundColor: bgColor, textColor: color })
+    .eq("id", folderId)
+    .eq("user_id", user_id);
+
+  if (error) {
+    console.error("Supabase Error (Update Folder Parent):", error);
+    return { error };
+  } else {
+    console.log("Updated folder parent in Supabase:", data);
+    return { data };
+  }
+}
+
+async function updateTextColors(color, folderId, user_id) {
+  const { data, error } = await supabase
+    .from("folders")
+    .update({ textColor: color })
     .eq("id", folderId)
     .eq("user_id", user_id);
 
@@ -813,6 +848,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "updateFolderColors") {
+    updateFolderColors(message.bgColor, message.color, message.folderId, message.user_id)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.action === "updateTextColors") {
+    updateTextColors(message.color, message.folderId, message.user_id)
+      .then((response) => sendResponse(response))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
 
   if (message.action === "saveChat") {
     saveChatToSupabase(message.chat)
